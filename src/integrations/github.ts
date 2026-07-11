@@ -31,11 +31,17 @@ export interface CheckRun {
   url: string;
 }
 
+/** A code file produced by a builder agent. */
+export interface FileChange {
+  path: string;
+  content: string;
+}
+
 export interface GitHubAdapter {
   createBranch(name: string): Promise<{ branch: string }>;
-  commit(branch: string, message: string): Promise<GitCommit>;
+  commit(branch: string, message: string, files: FileChange[]): Promise<GitCommit>;
   openPR(input: { branch: string; title: string }): Promise<PullRequest>;
-  /** GitHub Actions stand-in: run CI checks for a PR. */
+  /** GitHub Actions: run/inspect CI checks for a PR. */
   runChecks(prNumber: number): Promise<CheckRun>;
 }
 
@@ -54,10 +60,10 @@ export class MockGitHubAdapter implements GitHubAdapter {
     return { branch: name };
   }
 
-  async commit(branch: string, message: string): Promise<GitCommit> {
+  async commit(branch: string, message: string, files: FileChange[]): Promise<GitCommit> {
     this.commitCount += 1;
     const sha = `c${String(this.commitCount).padStart(6, '0')}f4ce`;
-    log.info({ branch, sha }, 'created mock commit');
+    log.info({ branch, sha, files: files.map((f) => f.path) }, 'created mock commit');
     return { sha, url: `${this.repo}/commit/${sha}`, message };
   }
 

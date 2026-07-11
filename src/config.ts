@@ -31,6 +31,17 @@ const envSchema = z.object({
   IAPI_TIMEOUT_MS: z.coerce.number().int().positive().default(300000),
   // Target repo the builders "work" on (mock GitHub adapter mints URLs under this).
   GITHUB_REPO_URL: z.string().default('https://github.com/ceil/demo'),
+  // External SDLC tools: "mock" (offline stand-ins) or "real" (live GitHub/Slack/Jira).
+  TOOLS_MODE: z.enum(['mock', 'real']).default('mock'),
+  GITHUB_TOKEN: z.string().default(''),
+  GITHUB_API_URL: z.string().default('https://api.github.com'),
+  SLACK_BOT_TOKEN: z.string().default(''),
+  SLACK_CHANNEL_ID: z.string().default(''),
+  SLACK_API_URL: z.string().default('https://slack.com/api'),
+  JIRA_BASE_URL: z.string().default(''),
+  JIRA_EMAIL: z.string().default(''),
+  JIRA_API_TOKEN: z.string().default(''),
+  JIRA_PROJECT_KEY: z.string().default(''),
   // Demo lever: make the FIRST QA check run fail so the Supervisor recovery is visible.
   INJECT_QA_FAILURE: z.enum(['true', 'false']).default('false'),
   STAGING_URL: z.string().default('https://staging.ceil-demo.app'),
@@ -58,6 +69,24 @@ export const config = {
   injectQaFailure: parsed.INJECT_QA_FAILURE === 'true',
   stagingUrl: parsed.STAGING_URL,
   prodUrl: parsed.PROD_URL,
+  toolsMode: parsed.TOOLS_MODE,
+  github: {
+    token: parsed.GITHUB_TOKEN,
+    apiUrl: parsed.GITHUB_API_URL,
+    // "owner/name" parsed from the repo URL's path.
+    repo: new URL(parsed.GITHUB_REPO_URL).pathname.replace(/^\/+|\.git$|\/+$/g, ''),
+  },
+  slack: {
+    botToken: parsed.SLACK_BOT_TOKEN,
+    channelId: parsed.SLACK_CHANNEL_ID,
+    apiUrl: parsed.SLACK_API_URL,
+  },
+  jira: {
+    baseUrl: parsed.JIRA_BASE_URL.replace(/\/+$/, ''),
+    email: parsed.JIRA_EMAIL,
+    apiToken: parsed.JIRA_API_TOKEN,
+    projectKey: parsed.JIRA_PROJECT_KEY,
+  },
   models: {
     flash: parsed.MODEL_FLASH,
     pro: parsed.MODEL_PRO,

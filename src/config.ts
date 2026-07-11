@@ -45,6 +45,7 @@ const envSchema = z.object({
   // Demo lever: make the FIRST QA check run fail so the Supervisor recovery is visible.
   INJECT_QA_FAILURE: z.enum(['true', 'false']).default('false'),
   STAGING_URL: z.string().default('https://staging.ceil-demo.app'),
+  STAGING_BRANCH: z.string().default('staging'),
   PROD_URL: z.string().default('https://ceil-demo.app'),
   LOOPER_TICK_MS: z.coerce.number().int().positive().default(3000),
   LOOPER_MAX_TICKS: z.coerce.number().int().positive().default(30),
@@ -68,6 +69,7 @@ export const config = {
   githubRepoUrl: parsed.GITHUB_REPO_URL,
   injectQaFailure: parsed.INJECT_QA_FAILURE === 'true',
   stagingUrl: parsed.STAGING_URL,
+  stagingBranch: parsed.STAGING_BRANCH,
   prodUrl: parsed.PROD_URL,
   toolsMode: parsed.TOOLS_MODE,
   github: {

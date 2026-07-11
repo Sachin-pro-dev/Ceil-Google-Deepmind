@@ -22,6 +22,7 @@ import type { EventBus } from '../bus/event-bus';
 import type { JiraAdapter } from '../integrations/jira';
 import type { SlackAdapter } from '../integrations/slack';
 import type { ConfluenceAdapter } from '../integrations/confluence';
+import type { GitHubAdapter } from '../integrations/github';
 import type { ManagerAgent } from '../agents/roles/manager';
 import { BUILDER_ROLES, type PlanningAgent } from '../agents/roles/planning';
 import type { BuilderAgent } from '../agents/roles/builder';
@@ -79,6 +80,7 @@ export class Looper {
       jira: JiraAdapter;
       slack: SlackAdapter;
       confluence: ConfluenceAdapter;
+      github: GitHubAdapter;
       manager: ManagerAgent;
       planning: PlanningAgent;
       builder: BuilderAgent;
@@ -133,18 +135,21 @@ export class Looper {
     return { action, state };
   }
 
-  /** All PR numbers produced so far for an objective (input for QA). */
-  private async collectPRs(objectiveId: string): Promise<number[]> {
+  /** All PR numbers + feature branches produced so far for an objective. */
+  private async collectPRs(objectiveId: string): Promise<{ numbers: number[]; branches: string[] }> {
     const tasks = (await this.deps.memory.listTasks(objectiveId)) as TaskRow[];
-    const prs: number[] = [];
+    const numbers: number[] = [];
+    const branches: string[] = [];
     for (const t of tasks) {
       const arts = await this.deps.memory.listArtifactsByTask(t.id);
       for (const a of arts) {
-        const n = (a.metadata as { number?: number } | null)?.number;
-        if (a.type === 'pr' && typeof n === 'number') prs.push(n);
+        if (a.type !== 'pr') continue;
+        const meta = a.metadata as { number?: number; branch?: string } | null;
+        if (typeof meta?.number === 'number') numbers.push(meta.number);
+        if (meta?.branch && !branches.includes(meta.branch)) branches.push(meta.branch);
       }
     }
-    return prs;
+    return { numbers, branches };
   }
 
   /** Create a Jira ticket + artifact + event for one task. */
@@ -273,25 +278,39 @@ export class Looper {
       }
 
       case 'run_qa': {
-        const prs = await this.collectPRs(objectiveId);
+        const { numbers } = await this.collectPRs(objectiveId);
         for (const t of pendingOf('qa')) {
-          await this.deps.qa.run({ id: t.id, objectiveId, prompt: t.prompt ?? '' }, prs);
+          await this.deps.qa.run({ id: t.id, objectiveId, prompt: t.prompt ?? '' }, numbers);
         }
         break;
       }
 
-      case 'deploy_staging':
+      case 'deploy_staging': {
         await this.deps.bus.publish({
           type: 'DeployRequested',
           objectiveId,
           agentRole: 'looper',
           payload: { environment: 'staging' },
         });
+        // Autonomy Level 4: feature branches auto-merge into the staging branch.
+        const { branches } = await this.collectPRs(objectiveId);
+        if (branches.length) {
+          await this.deps.github.createBranch(config.stagingBranch);
+          for (const branch of branches) {
+            await this.deps.github.mergeBranch(branch, config.stagingBranch);
+          }
+          await this.deps.bus.publish({
+            type: 'AgentToolCall',
+            objectiveId,
+            agentRole: 'looper',
+            payload: { tool: 'github', action: 'merge', merged: branches, into: config.stagingBranch },
+          });
+        }
         await this.deps.bus.publish({
           type: 'Deployed',
           objectiveId,
           agentRole: 'looper',
-          payload: { environment: 'staging', url: config.stagingUrl },
+          payload: { environment: 'staging', url: config.stagingUrl, mergedBranches: branches.length },
         });
         await this.deps.memory.updateObjectiveStatus(objectiveId, 'staged');
         // Prod is sensitive-tagged: raise the governance gate instead of proceeding.
@@ -305,17 +324,31 @@ export class Looper {
           `Ceil: staging deployed (${config.stagingUrl}). Approve production deploy?`,
         );
         break;
+      }
 
       case 'await_approval':
         // Gate is up; nothing to do until a human approves (Console or Slack).
         break;
 
       case 'deploy_prod': {
+        // Human approved: promote staging into the default branch (real merge).
+        const base = await this.deps.github.getDefaultBranch();
+        const merge = await this.deps.github.mergeBranch(
+          config.stagingBranch,
+          base,
+          `Ceil: release ${objective.prompt.slice(0, 60)}`,
+        );
+        await this.deps.bus.publish({
+          type: 'AgentToolCall',
+          objectiveId,
+          agentRole: 'looper',
+          payload: { tool: 'github', action: 'merge', merged: [config.stagingBranch], into: base, sha: merge.sha },
+        });
         await this.deps.bus.publish({
           type: 'Deployed',
           objectiveId,
           agentRole: 'looper',
-          payload: { environment: 'production', url: config.prodUrl },
+          payload: { environment: 'production', url: config.prodUrl, mergedTo: base },
         });
         await this.deps.memory.updateObjectiveStatus(objectiveId, 'delivered');
         // Closing beat: release notes to Confluence + Slack summary (PRD demo close).

@@ -5,138 +5,210 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Ceil Console</title>
 <style>
-  /* PRD 7.1 palette tokens */
+  /* Monochrome design system: black & white primary, 1px borders, minimal accents */
   :root {
-    --bg-base:#0A0A0F; --bg-surface:#14141C; --bg-elevated:#1E1E28;
-    --border:#2A2A38; --text-1:#F0F0F5; --text-2:#A0A0B0; --text-3:#6A6A80;
-    --manager:#F5B841; --planning:#4A9EFF; --looper:#B15CFF; --supervisor:#FF7A45;
-    --backend:#3ECF8E; --frontend:#22D3EE; --database:#14B8A6; --qa:#EC4899;
-    --ok:#22C55E; --fail:#EF4444; --think:#F59E0B; --gate:#EAB308; --recover:#F97316;
+    --bg:#0A0A0A; --panel:#111113; --panel-2:#16161A; --border:#26262B; --border-strong:#3F3F46;
+    --fg:#FAFAFA; --fg-2:#A1A1AA; --fg-3:#63636B;
+    --ok:#4ADE80; --fail:#F87171; --warn:#FBBF24;
+    --radius:10px;
   }
-  * { box-sizing:border-box; margin:0; }
-  body { background:var(--bg-base); color:var(--text-1); font:14px/1.45 system-ui,'Segoe UI',sans-serif; height:100vh; display:flex; flex-direction:column; overflow:hidden; }
-  .mono { font-family:'JetBrains Mono',Consolas,monospace; }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  html,body { height:100%; }
+  body { background:var(--bg); color:var(--fg); font:13.5px/1.5 ui-sans-serif,system-ui,'Segoe UI',sans-serif; display:flex; flex-direction:column; overflow:hidden; }
+  .mono { font-family:'JetBrains Mono',ui-monospace,Consolas,monospace; }
+  ::-webkit-scrollbar { width:8px; height:8px; } ::-webkit-scrollbar-thumb { background:var(--border-strong); border-radius:4px; } ::-webkit-scrollbar-track { background:transparent; }
 
-  /* Top bar */
-  #topbar { display:flex; align-items:center; gap:16px; padding:10px 16px; background:var(--bg-surface); border-bottom:1px solid var(--border); }
-  #brand { font-weight:800; letter-spacing:.18em; color:var(--looper); font-size:16px; }
-  #objText { color:var(--text-2); flex:1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-  .chip { padding:3px 10px; border:1px solid var(--border); border-radius:999px; color:var(--text-2); font-size:12px; background:var(--bg-elevated); white-space:nowrap; }
-  #statusChip.delivered { color:var(--ok); border-color:var(--ok); }
-  #statusChip.staged { color:var(--gate); border-color:var(--gate); }
+  /* ---------- Header ---------- */
+  header { display:flex; align-items:center; gap:14px; padding:0 20px; height:52px; border-bottom:1px solid var(--border); background:var(--bg); flex:none; }
+  #brand { font-weight:800; letter-spacing:.34em; font-size:14px; }
+  #brand::after { content:''; display:inline-block; width:7px; height:7px; background:var(--fg); border-radius:50%; margin-left:10px; vertical-align:middle; animation:blink 2.4s infinite; }
+  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.2} }
+  #objText { color:var(--fg-2); flex:1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-size:13px; }
+  .chip { display:inline-flex; align-items:center; gap:6px; height:26px; padding:0 11px; border:1px solid var(--border); border-radius:999px; color:var(--fg-2); font-size:12px; background:var(--panel); white-space:nowrap; }
+  .chip b { color:var(--fg); font-weight:600; }
+  #statusChip.delivered { border-color:var(--ok); color:var(--ok); }
+  #statusChip.staged { border-color:var(--warn); color:var(--warn); }
 
+  /* ---------- Layout ---------- */
   #main { display:flex; flex:1; min-height:0; }
+  #canvas { flex:1; display:flex; flex-direction:column; min-width:0; }
+  #org { flex:1; display:flex; flex-direction:column; justify-content:center; gap:30px; padding:26px; position:relative; background:
+    radial-gradient(circle at 50% 0%, #131316 0%, var(--bg) 60%); }
+  .tier { display:flex; justify-content:center; gap:16px; }
+  .tlabel { position:absolute; left:26px; color:var(--fg-3); font-size:10px; letter-spacing:.16em; text-transform:uppercase; }
 
-  /* Org chart */
-  #org { flex:1; display:flex; flex-direction:column; justify-content:center; gap:34px; padding:24px; min-width:0; }
-  .tier { display:flex; justify-content:center; gap:22px; }
-  .node { width:168px; border:2px solid var(--border); border-radius:12px; background:var(--bg-surface); padding:10px 12px; position:relative; transition:box-shadow .3s,border-color .3s; }
-  .node h4 { font-size:12px; letter-spacing:.08em; text-transform:uppercase; }
-  .node .sub { color:var(--text-3); font-size:11px; min-height:28px; margin-top:4px; }
-  .node.exec { animation:pulse 1.1s infinite; }
-  .node.done { box-shadow:0 0 0 2px var(--ok); }
-  .node.fail { box-shadow:0 0 14px 2px var(--fail); border-color:var(--fail); }
-  .node.recover { box-shadow:0 0 14px 2px var(--recover); border-color:var(--recover); }
-  .node.gated { box-shadow:0 0 12px 1px var(--gate); border-color:var(--gate); animation:pulse 2.4s infinite; }
-  @keyframes pulse { 0%,100% { box-shadow:0 0 4px 0 var(--glow); } 50% { box-shadow:0 0 18px 3px var(--glow); } }
-  #node-looper { width:190px; }
-  #tickring { position:absolute; top:8px; right:10px; font-size:11px; color:var(--looper); }
+  /* ---------- Nodes ---------- */
+  .node { width:186px; border:1px solid var(--border); border-radius:var(--radius); background:var(--panel); padding:12px 14px; position:relative; transition:border-color .25s, box-shadow .25s, transform .15s; }
+  .node.clickable { cursor:pointer; }
+  .node.clickable:hover { border-color:var(--border-strong); transform:translateY(-1px); }
+  .node h4 { font-size:11px; letter-spacing:.12em; text-transform:uppercase; font-weight:700; display:flex; align-items:center; gap:8px; }
+  .node .dot { width:7px; height:7px; border-radius:50%; background:var(--fg-3); flex:none; }
+  .node .sub { color:var(--fg-3); font-size:11.5px; margin-top:6px; min-height:34px; overflow:hidden; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; }
+  .node .foot { margin-top:8px; font-size:10.5px; color:var(--fg-3); display:flex; justify-content:space-between; }
+  .node.exec { border-color:var(--fg); box-shadow:0 0 0 1px var(--fg), 0 0 24px rgba(250,250,250,.08); }
+  .node.exec .dot { background:var(--fg); animation:blink 1s infinite; }
+  .node.done { border-color:var(--border-strong); }
+  .node.done .dot { background:var(--ok); }
+  .node.fail { border-color:var(--fail); box-shadow:0 0 18px rgba(248,113,113,.15); }
+  .node.fail .dot { background:var(--fail); animation:blink .6s infinite; }
+  .node.recover { border-color:var(--warn); }
+  .node.recover .dot { background:var(--warn); animation:blink .8s infinite; }
+  .node.gated { border-color:var(--warn); box-shadow:0 0 18px rgba(251,191,36,.12); }
+  .node.gated .dot { background:var(--warn); animation:blink 1.4s infinite; }
+  #node-looper { border-style:solid; }
+  #node-looper .tick { position:absolute; top:10px; right:12px; font-size:10.5px; color:var(--fg-2); }
 
-  /* Event stream */
-  #stream { width:340px; border-left:1px solid var(--border); background:var(--bg-surface); display:flex; flex-direction:column; min-height:0; }
-  #stream header, #loopbox header { padding:8px 12px; font-size:11px; letter-spacing:.1em; text-transform:uppercase; color:var(--text-3); border-bottom:1px solid var(--border); }
-  #events { flex:1; overflow-y:auto; padding:6px; }
-  .evt { display:flex; gap:8px; padding:6px 8px; border-radius:8px; margin-bottom:4px; background:var(--bg-elevated); font-size:12px; align-items:baseline; }
-  .pill { min-width:20px; height:20px; border-radius:6px; display:inline-flex; align-items:center; justify-content:center; font-size:10px; font-weight:700; color:#0A0A0F; }
-  .evt .t { color:var(--text-3); font-size:10px; margin-left:auto; white-space:nowrap; }
-  #loopbox { border-top:1px solid var(--border); }
-  #loopbox .body { padding:8px 12px; font-size:12px; color:var(--text-2); }
-  #loopbox .big { font-size:22px; color:var(--looper); font-weight:700; }
-
-  /* Bottom: artifacts + controls */
-  #bottom { border-top:1px solid var(--border); background:var(--bg-surface); padding:8px 16px; display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
-  .art { border:1px solid var(--border); background:var(--bg-elevated); border-radius:8px; padding:4px 10px; font-size:12px; color:var(--text-2); }
-  .art b { color:var(--text-1); }
+  /* ---------- Bottom bar ---------- */
+  #bottom { border-top:1px solid var(--border); background:var(--bg); padding:10px 20px; display:flex; gap:10px; align-items:center; flex:none; flex-wrap:wrap; }
+  details.art { position:relative; }
+  details.art > summary { list-style:none; cursor:pointer; display:inline-flex; align-items:center; gap:7px; height:28px; padding:0 12px; border:1px solid var(--border); border-radius:8px; background:var(--panel); color:var(--fg-2); font-size:12px; user-select:none; }
+  details.art > summary::-webkit-details-marker { display:none; }
+  details.art > summary b { color:var(--fg); }
+  details.art[open] > summary { border-color:var(--border-strong); color:var(--fg); }
+  details.art .pop { position:absolute; bottom:36px; left:0; width:330px; max-height:260px; overflow:auto; border:1px solid var(--border-strong); border-radius:var(--radius); background:var(--panel-2); padding:6px; z-index:30; box-shadow:0 12px 40px rgba(0,0,0,.6); }
+  .pop a { display:block; padding:7px 9px; border-radius:6px; color:var(--fg-2); text-decoration:none; font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .pop a:hover { background:var(--panel); color:var(--fg); }
+  .pop .empty { padding:8px; color:var(--fg-3); font-size:12px; }
   #controls { margin-left:auto; display:flex; gap:8px; align-items:center; }
-  input[type=text] { background:var(--bg-elevated); border:1px solid var(--border); color:var(--text-1); border-radius:8px; padding:6px 10px; font-size:13px; width:270px; }
-  button { background:var(--looper); color:#fff; border:0; border-radius:8px; padding:7px 14px; font-weight:600; cursor:pointer; font-size:13px; }
-  button.approve { background:var(--gate); color:#0A0A0F; animation:pulse 1.6s infinite; --glow:var(--gate); }
-  button.ghost { background:var(--bg-elevated); color:var(--text-2); border:1px solid var(--border); }
+  input[type=text] { background:var(--panel); border:1px solid var(--border); color:var(--fg); border-radius:8px; padding:0 12px; height:32px; font-size:13px; width:300px; outline:none; }
+  input[type=text]:focus { border-color:var(--fg-2); }
+  button { background:var(--fg); color:var(--bg); border:1px solid var(--fg); border-radius:8px; height:32px; padding:0 15px; font-weight:600; cursor:pointer; font-size:12.5px; }
+  button:hover { background:#E4E4E7; }
+  button.ghost { background:transparent; color:var(--fg-2); border-color:var(--border); }
+  button.ghost:hover { color:var(--fg); border-color:var(--border-strong); background:var(--panel); }
+  button.approve { border-color:var(--warn); background:var(--warn); color:#111; animation:blink 1.6s infinite; }
 
-  /* Start screen */
-  #start { position:absolute; inset:0; background:var(--bg-base); display:flex; flex-direction:column; align-items:center; justify-content:center; gap:18px; z-index:10; }
-  #start h1 { letter-spacing:.3em; color:var(--looper); }
-  #start p { color:var(--text-3); }
-  #start input { width:560px; padding:14px 16px; font-size:15px; }
-  #start .row { display:flex; gap:10px; align-items:center; color:var(--text-2); font-size:13px; }
+  /* ---------- Activity rail ---------- */
+  #rail { width:350px; border-left:1px solid var(--border); background:var(--bg); display:flex; flex-direction:column; min-height:0; flex:none; }
+  #rail section.head, #loop .head { padding:9px 14px; font-size:10.5px; letter-spacing:.16em; text-transform:uppercase; color:var(--fg-3); border-bottom:1px solid var(--border); }
+  #events { flex:1; overflow-y:auto; padding:8px; }
+  .evt { display:flex; gap:9px; padding:7px 9px; border:1px solid transparent; border-radius:8px; font-size:12px; align-items:baseline; }
+  .evt:hover { border-color:var(--border); background:var(--panel); }
+  .evt .edot { width:6px; height:6px; border-radius:50%; flex:none; transform:translateY(-1px); }
+  .evt .who { color:var(--fg-3); font-size:10.5px; min-width:56px; text-transform:uppercase; letter-spacing:.06em; flex:none; }
+  .evt .what { color:var(--fg-2); flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .evt .t { color:var(--fg-3); font-size:10px; flex:none; }
+  #loop { border-top:1px solid var(--border); flex:none; }
+  #loop .body { padding:10px 14px 12px; }
+  #loop .big { font-size:24px; font-weight:700; letter-spacing:-.02em; }
+  #loop .big small { font-size:11px; color:var(--fg-3); font-weight:400; letter-spacing:0; margin-left:6px; }
+  #lastDecision { color:var(--fg-3); font-size:11.5px; margin-top:4px; display:block; overflow:hidden; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; }
+
+  /* ---------- Code drawer (Sandbox Peek) ---------- */
+  #drawer { position:fixed; top:0; right:-620px; width:600px; height:100%; background:var(--bg); border-left:1px solid var(--border-strong); z-index:50; display:flex; flex-direction:column; transition:right .28s cubic-bezier(.2,.8,.2,1); box-shadow:-30px 0 80px rgba(0,0,0,.55); }
+  #drawer.open { right:0; }
+  #drawer .dhead { padding:14px 18px; border-bottom:1px solid var(--border); display:flex; align-items:center; gap:12px; }
+  #drawer .dhead h3 { font-size:13px; letter-spacing:.1em; text-transform:uppercase; }
+  #drawer .dhead .x { margin-left:auto; cursor:pointer; color:var(--fg-3); border:1px solid var(--border); border-radius:6px; width:26px; height:26px; display:flex; align-items:center; justify-content:center; background:transparent; padding:0; }
+  #drawer .dmeta { padding:12px 18px; border-bottom:1px solid var(--border); color:var(--fg-2); font-size:12.5px; }
+  #drawer .dmeta a { color:var(--fg); }
+  #ftabs { display:flex; gap:0; border-bottom:1px solid var(--border); overflow-x:auto; flex:none; }
+  #ftabs .ftab { padding:9px 14px; font-size:11.5px; color:var(--fg-3); cursor:pointer; border-right:1px solid var(--border); white-space:nowrap; background:var(--panel); }
+  #ftabs .ftab.active { color:var(--fg); background:var(--bg); border-bottom:1px solid var(--bg); margin-bottom:-1px; }
+  #fcode { flex:1; overflow:auto; padding:16px 18px; font-size:12px; line-height:1.65; color:#D4D4D8; white-space:pre; tab-size:2; }
+  #overlay { position:fixed; inset:0; background:rgba(0,0,0,.45); z-index:40; display:none; }
+  #overlay.show { display:block; }
+
+  /* ---------- Start screen ---------- */
+  #start { position:fixed; inset:0; background:var(--bg); display:flex; flex-direction:column; align-items:center; justify-content:center; gap:22px; z-index:60; }
+  #start h1 { letter-spacing:.5em; font-size:30px; font-weight:800; text-indent:.5em; }
+  #start p { color:var(--fg-3); font-size:14px; }
+  #start .box { width:640px; border:1px solid var(--border-strong); border-radius:14px; background:var(--panel); padding:18px; display:flex; flex-direction:column; gap:14px; }
+  #start input[type=text] { width:100%; height:44px; font-size:14px; background:var(--bg); }
+  #start .row { display:flex; align-items:center; gap:14px; color:var(--fg-2); font-size:12.5px; }
+  #start .row label { display:flex; gap:7px; align-items:center; cursor:pointer; }
+  #start button { height:40px; font-size:13.5px; }
+  #modes { color:var(--fg-3); font-size:11.5px; letter-spacing:.05em; }
 </style>
 </head>
 <body>
   <div id="start">
-    <h1>C E I L</h1>
-    <p>A live-replanning multi-agent runtime. What do you want built?</p>
-    <input id="promptInput" type="text" value="Build a Leave Management module with role-based approvals, Slack notifications, and an admin dashboard" />
-    <div class="row">
-      <label><input id="injectFail" type="checkbox" checked /> stage a QA failure (Supervisor recovery beat)</label>
-      <span class="chip">Autonomy: Level 4 — staging auto, prod gated</span>
+    <h1>CEIL</h1>
+    <p>A live-replanning multi-agent runtime. One objective in — an engineering org out.</p>
+    <div class="box">
+      <input id="promptInput" type="text" value="Build a Leave Management module with role-based approvals, Slack notifications, and an admin dashboard" />
+      <div class="row">
+        <label><input id="injectFail" type="checkbox" /> stage a QA failure (Supervisor recovery)</label>
+        <span class="chip">Autonomy <b>L4</b> · prod gated</span>
+        <span style="flex:1"></span>
+        <button id="startBtn">Spawn the org →</button>
+      </div>
+      <div id="modes" class="mono">modes: …</div>
     </div>
-    <button id="startBtn">Spawn the org</button>
   </div>
 
-  <div id="topbar">
+  <header>
     <span id="brand">CEIL</span>
     <span id="objText">—</span>
-    <span class="chip">Autonomy L4</span>
+    <span class="chip">Autonomy <b>L4</b></span>
     <span class="chip mono" id="elapsed">0:00</span>
-    <span class="chip" id="agentsActive">0 active</span>
+    <span class="chip"><b id="activeN">0</b>&nbsp;active</span>
     <span class="chip" id="statusChip">idle</span>
-  </div>
+  </header>
 
   <div id="main">
-    <div id="org">
-      <div class="tier"><div class="node" id="node-manager" style="border-color:var(--manager)"><h4 style="color:var(--manager)">Manager</h4><div class="sub">idle</div></div></div>
-      <div class="tier">
-        <div class="node" id="node-planning" style="border-color:var(--planning)"><h4 style="color:var(--planning)">Planning</h4><div class="sub">idle</div></div>
-        <div class="node" id="node-looper" style="border-color:var(--looper)"><h4 style="color:var(--looper)">Looper</h4><div class="sub">idle</div><span id="tickring" class="mono">tick 0</span></div>
-        <div class="node" id="node-supervisor" style="border-color:var(--supervisor)"><h4 style="color:var(--supervisor)">Supervisor</h4><div class="sub">monitoring</div></div>
+    <div id="canvas">
+      <div id="org">
+        <div class="tier" style="position:relative"><span class="tlabel" style="top:6px">Command</span>
+          <div class="node" id="node-manager"><h4><span class="dot"></span>Manager</h4><div class="sub">idle</div><div class="foot"><span>strategy</span></div></div>
+        </div>
+        <div class="tier" style="position:relative"><span class="tlabel" style="top:6px">Coordination</span>
+          <div class="node" id="node-planning"><h4><span class="dot"></span>Planning</h4><div class="sub">idle</div><div class="foot"><span>decomposition</span></div></div>
+          <div class="node" id="node-looper"><h4><span class="dot"></span>Looper</h4><div class="sub">idle</div><span class="tick mono">tick 0</span><div class="foot"><span>live replanner</span></div></div>
+          <div class="node" id="node-supervisor"><h4><span class="dot"></span>Supervisor</h4><div class="sub">monitoring</div><div class="foot"><span>recovery</span></div></div>
+        </div>
+        <div class="tier" style="position:relative"><span class="tlabel" style="top:6px">Execution</span>
+          <div class="node clickable" id="node-backend"><h4><span class="dot"></span>Backend</h4><div class="sub">idle</div><div class="foot"><span>APIs</span><span>view code ↗</span></div></div>
+          <div class="node clickable" id="node-frontend"><h4><span class="dot"></span>Frontend</h4><div class="sub">idle</div><div class="foot"><span>UI</span><span>view code ↗</span></div></div>
+          <div class="node clickable" id="node-database"><h4><span class="dot"></span>Database</h4><div class="sub">idle</div><div class="foot"><span>schema</span><span>view code ↗</span></div></div>
+          <div class="node clickable" id="node-qa"><h4><span class="dot"></span>QA</h4><div class="sub">idle</div><div class="foot"><span>verification</span></div></div>
+        </div>
       </div>
-      <div class="tier">
-        <div class="node" id="node-backend" style="border-color:var(--backend)"><h4 style="color:var(--backend)">Backend</h4><div class="sub">idle</div></div>
-        <div class="node" id="node-frontend" style="border-color:var(--frontend)"><h4 style="color:var(--frontend)">Frontend</h4><div class="sub">idle</div></div>
-        <div class="node" id="node-database" style="border-color:var(--database)"><h4 style="color:var(--database)">Database</h4><div class="sub">idle</div></div>
-        <div class="node" id="node-qa" style="border-color:var(--qa)"><h4 style="color:var(--qa)">QA</h4><div class="sub">idle</div></div>
+      <div id="bottom">
+        <details class="art"><summary>Jira <b id="cJira">0</b></summary><div class="pop" id="pJira"></div></details>
+        <details class="art"><summary>Pull requests <b id="cPr">0</b></summary><div class="pop" id="pPr"></div></details>
+        <details class="art"><summary>Tests <b id="cTest">0</b></summary><div class="pop" id="pTest"></div></details>
+        <details class="art"><summary>Docs <b id="cDoc">0</b></summary><div class="pop" id="pDoc"></div></details>
+        <span class="chip">Slack sent <b id="cSlack">0</b></span>
+        <div id="controls">
+          <input id="slackInput" type="text" placeholder="Requirement change — sent to the real Slack channel…" />
+          <button class="ghost" id="slackBtn">Send as PM</button>
+          <button class="approve" id="approveBtn" style="display:none">Approve prod deploy</button>
+        </div>
       </div>
     </div>
-    <div id="stream">
-      <header>Event stream</header>
+    <div id="rail">
+      <section class="head">Activity</section>
       <div id="events"></div>
-      <div id="loopbox">
-        <header>Looper</header>
-        <div class="body"><span class="big" id="tickCount">0</span> ticks<br/><span id="lastDecision">—</span></div>
+      <div id="loop">
+        <div class="head">Looper</div>
+        <div class="body">
+          <span class="big" id="tickCount">0<small>ticks</small></span>
+          <span id="lastDecision">—</span>
+        </div>
       </div>
     </div>
   </div>
 
-  <div id="bottom">
-    <span class="art">Jira <b id="cJira">0</b></span>
-    <span class="art">GitHub PRs <b id="cPr">0</b></span>
-    <span class="art">Tests <b id="cTest">0</b></span>
-    <span class="art">Docs <b id="cDoc">0</b></span>
-    <span class="art">Slack <b id="cSlack">0</b></span>
-    <div id="controls">
-      <input id="slackInput" type="text" placeholder='Slack change, e.g. "Also let employees cancel requests"' />
-      <button class="ghost" id="slackBtn">Send as PM</button>
-      <button class="approve" id="approveBtn" style="display:none">Approve prod deploy</button>
-    </div>
+  <div id="overlay"></div>
+  <div id="drawer">
+    <div class="dhead"><h3 id="dTitle">Agent</h3><button class="x" id="dClose">✕</button></div>
+    <div class="dmeta" id="dMeta">—</div>
+    <div id="ftabs"></div>
+    <pre id="fcode" class="mono"></pre>
   </div>
 
 <script>
-const roleColor = { manager:'--manager', planning:'--planning', looper:'--looper', supervisor:'--supervisor', backend:'--backend', frontend:'--frontend', database:'--database', qa:'--qa' };
-const evtColor = { LooperDecision:'#B15CFF', ArtifactCreated:'#4A9EFF', TaskCompleted:'#22C55E', TaskFailed:'#EF4444', ConflictDetected:'#F97316', RecoveryInitiated:'#F97316', HumanApprovalRequested:'#EAB308', HumanApproved:'#22C55E', Deployed:'#22C55E', TaskAssigned:'#4A9EFF', AgentThinking:'#F59E0B', AgentToolCall:'#4A9EFF', PlanReady:'#B15CFF', ObjectiveReceived:'#F5B841' };
-let objectiveId = null, startedAt = null;
-
+const EVT = {
+  LooperDecision:'#FAFAFA', ArtifactCreated:'#A1A1AA', TaskCompleted:'#4ADE80', TaskFailed:'#F87171',
+  ConflictDetected:'#FBBF24', RecoveryInitiated:'#FBBF24', HumanApprovalRequested:'#FBBF24',
+  HumanApproved:'#4ADE80', Deployed:'#4ADE80', TaskAssigned:'#A1A1AA', AgentThinking:'#63636B',
+  AgentToolCall:'#A1A1AA', PlanReady:'#FAFAFA', ObjectiveReceived:'#FAFAFA',
+};
+let objectiveId = null, startedAt = null, state = null;
 const $ = (id) => document.getElementById(id);
-const cssVar = (v) => getComputedStyle(document.documentElement).getPropertyValue(v);
+
+fetch('/health').then(r=>r.json()).then(h => { $('modes').textContent = 'env: ' + h.env + ' · llm: ' + (h.llm||'?') + ' · tools: ' + (h.tools||'?'); }).catch(()=>{});
 
 $('startBtn').onclick = async () => {
   const res = await fetch('/api/objectives', { method:'POST', headers:{'Content-Type':'application/json'},
@@ -144,32 +216,63 @@ $('startBtn').onclick = async () => {
   const data = await res.json();
   objectiveId = data.objectiveId; startedAt = Date.now();
   $('start').style.display = 'none';
-  setInterval(poll, 1000); poll();
+  setInterval(poll, 1200); poll();
 };
-
 $('slackBtn').onclick = async () => {
   const text = $('slackInput').value.trim(); if (!text) return;
   await fetch('/api/slack', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ text }) });
   $('slackInput').value = '';
 };
-
 $('approveBtn').onclick = async () => {
   await fetch('/api/approve/' + objectiveId, { method:'POST' });
   $('approveBtn').style.display = 'none';
 };
 
-function setNode(role, cls, sub) {
-  const n = $('node-' + role); if (!n) return;
-  n.className = 'node' + (cls ? ' ' + cls : '');
-  n.style.setProperty('--glow', cssVar(roleColor[role] || '--border'));
-  if (sub !== undefined) n.querySelector('.sub').textContent = sub;
+/* ---- Code drawer ---- */
+const closeDrawer = () => { $('drawer').classList.remove('open'); $('overlay').classList.remove('show'); };
+$('dClose').onclick = closeDrawer; $('overlay').onclick = closeDrawer;
+for (const role of ['backend','frontend','database','qa']) {
+  $('node-' + role).onclick = () => openDrawer(role);
+}
+function openDrawer(role) {
+  if (!state) return;
+  const tasks = state.tasks.filter(t => t.role === role);
+  const withFiles = tasks.filter(t => t.output && t.output.files && t.output.files.length);
+  $('dTitle').textContent = role + ' agent';
+  const t = withFiles[withFiles.length - 1] || tasks[tasks.length - 1];
+  if (!t) { $('dMeta').textContent = 'No task yet.'; $('ftabs').innerHTML=''; $('fcode').textContent=''; }
+  else {
+    const out = t.output || {};
+    $('dMeta').innerHTML = (out.summary ? out.summary + '<br/>' : (t.status === 'in_progress' ? 'Working — code is being written…<br/>' : '')) +
+      (out.prUrl ? 'PR: <a href="' + out.prUrl + '" target="_blank">' + out.prUrl + '</a>' : '');
+    const files = (out.files || []);
+    renderFiles(files);
+  }
+  $('drawer').classList.add('open'); $('overlay').classList.add('show');
+}
+function renderFiles(files) {
+  const tabs = $('ftabs'); tabs.innerHTML = '';
+  if (!files.length) { $('fcode').textContent = '// no files yet — the agent is still working'; return; }
+  files.forEach((f, i) => {
+    const el = document.createElement('div');
+    el.className = 'ftab' + (i === 0 ? ' active' : ''); el.textContent = f.path;
+    el.onclick = () => { tabs.querySelectorAll('.ftab').forEach(x => x.classList.remove('active')); el.classList.add('active'); $('fcode').textContent = f.content; };
+    tabs.appendChild(el);
+  });
+  $('fcode').textContent = files[0].content;
 }
 
+/* ---- Polling + render ---- */
 function poll() {
   if (!objectiveId) return;
-  fetch('/api/state/' + objectiveId).then(r => r.json()).then(render).catch(() => {});
+  fetch('/api/state/' + objectiveId).then(r => r.json()).then(s => { state = s; render(s); }).catch(() => {});
 }
-
+function setNode(role, cls, sub) {
+  const n = $('node-' + role); if (!n) return;
+  n.className = n.className.replace(/\b(exec|done|fail|recover|gated)\b/g,'').trim();
+  if (cls) n.classList.add(cls);
+  if (sub !== undefined) n.querySelector('.sub').textContent = sub;
+}
 function render(s) {
   if (!s.objective) return;
   $('objText').textContent = s.objective.prompt;
@@ -178,80 +281,76 @@ function render(s) {
   const secs = Math.floor((Date.now() - startedAt) / 1000);
   $('elapsed').textContent = Math.floor(secs/60) + ':' + String(secs%60).padStart(2,'0');
 
-  // Node states from tasks
   const latest = {};
-  for (const t of s.tasks) latest[t.role] = t; // later rows win per role
+  for (const t of s.tasks) latest[t.role] = t;
   let active = 0;
   for (const role of ['manager','planning','backend','frontend','database','qa']) {
     const t = latest[role];
-    if (!t) { setNode(role, '', role==='planning' ? 'idle' : 'idle'); continue; }
-    const short = (t.prompt || '').slice(0, 52);
+    if (!t) { setNode(role, '', 'idle'); continue; }
+    const short = (t.prompt || '').slice(0, 60);
     if (t.status === 'in_progress') { setNode(role, 'exec', short); active++; }
-    else if (t.status === 'failed') setNode(role, 'fail', 'FAILED — supervisor engaged');
+    else if (t.status === 'failed') setNode(role, 'fail', 'failed — supervisor engaged');
     else if (t.status === 'completed') setNode(role, 'done', short);
-    else setNode(role, '', 'queued: ' + short);
+    else setNode(role, '', 'queued — ' + short);
   }
-  $('agentsActive').textContent = active + ' active';
+  $('activeN').textContent = active;
 
-  // Looper node + panel
   const dec = s.decisions[0];
-  const tick = dec ? dec.tick : 0;
-  $('tickCount').textContent = tick;
-  $('tickring').textContent = 'tick ' + tick;
   if (dec) {
-    const d = (dec.deltas && dec.deltas.action) || '';
-    $('lastDecision').textContent = d + ' — ' + (dec.looperReasoning || '').slice(0, 120);
-    setNode('looper', status === 'delivered' ? 'done' : 'exec', 'action: ' + d);
+    $('tickCount').innerHTML = dec.tick + '<small>ticks</small>';
+    document.querySelector('#node-looper .tick').textContent = 'tick ' + dec.tick;
+    const act = (dec.deltas && dec.deltas.action) || '';
+    $('lastDecision').textContent = act + ' — ' + (dec.looperReasoning || '');
+    setNode('looper', status === 'delivered' ? 'done' : 'exec', 'action: ' + act);
   }
 
-  // Supervisor node reacts to recovery events
-  const hasRecovery = s.events.some(e => e.type === 'RecoveryInitiated');
-  const hasConflict = s.events.some(e => e.type === 'ConflictDetected');
-  if (hasConflict && !s.events.some(e => e.type === 'TaskCompleted' && e.agentRole === 'qa'))
-    setNode('supervisor', 'recover', 'recovering: re-tasked backend');
-  else if (hasRecovery) setNode('supervisor', 'done', 'recovered a failed build');
+  const conf = s.events.some(e => e.type === 'ConflictDetected');
+  const qaOk = latest['qa'] && latest['qa'].status === 'completed';
+  if (conf && !qaOk) setNode('supervisor', 'recover', 'recovering — re-tasked backend');
+  else if (conf) setNode('supervisor', 'done', 'recovered a failed build');
 
-  // Gate
   const gateUp = status === 'staged';
   $('approveBtn').style.display = gateUp ? '' : 'none';
-  if (gateUp) setNode('manager', 'gated', 'awaiting prod approval');
+  if (gateUp) setNode('manager', 'gated', 'awaiting production approval');
 
-  // Event stream
-  const box = $('events');
-  box.innerHTML = s.events.map(e => {
-    const role = e.agentRole || 'looper';
-    const c = cssVar(roleColor[role] || '--looper');
-    const desc = describe(e);
-    return `<div class="evt"><span class="pill" style="background:${c}">${(role[0]||'?').toUpperCase()}</span>` +
-           `<span style="color:${evtColor[e.type]||'#A0A0B0'}">${desc}</span>` +
-           `<span class="t mono">${new Date(e.timestamp).toLocaleTimeString()}</span></div>`;
+  $('events').innerHTML = s.events.map(e => {
+    const who = e.agentRole || 'system';
+    return '<div class="evt"><span class="edot" style="background:' + (EVT[e.type]||'#63636B') + '"></span>' +
+      '<span class="who">' + who + '</span><span class="what">' + describe(e) + '</span>' +
+      '<span class="t mono">' + new Date(e.timestamp).toLocaleTimeString() + '</span></div>';
   }).join('');
 
-  // Artifacts feed
-  const byType = (t) => s.artifacts.filter(a => a.type === t).length;
-  $('cJira').textContent = byType('jira'); $('cPr').textContent = byType('pr');
-  $('cTest').textContent = byType('test'); $('cDoc').textContent = byType('doc');
+  const by = (t) => s.artifacts.filter(a => a.type === t);
+  fill('Jira', by('jira'), a => (a.metadata && a.metadata.key ? a.metadata.key + ' — ' : '') + (a.metadata && a.metadata.title || 'ticket'));
+  fill('Pr', by('pr'), a => 'PR #' + (a.metadata && a.metadata.number || '?') + ' (' + a.role + ')');
+  fill('Test', by('test'), a => (a.metadata && a.metadata.failures ? a.metadata.failures + ' failing / ' : '') + ((a.metadata && a.metadata.totals) ?? 0) + ' checks');
+  fill('Doc', by('doc'), a => a.metadata && a.metadata.title || 'page');
   $('cSlack').textContent = s.slackOutbox.length;
 }
-
+function fill(key, items, label) {
+  $('c' + key).textContent = items.length;
+  $('p' + key).innerHTML = items.length
+    ? items.map(a => '<a href="' + (a.externalUrl || '#') + '" target="_blank">' + label(a) + ' ↗</a>').join('')
+    : '<div class="empty">nothing yet</div>';
+}
 function describe(e) {
   const p = e.payload || {};
   switch (e.type) {
-    case 'LooperDecision': return 'Looper: ' + p.action;
-    case 'ArtifactCreated': return p.tool === 'jira' ? 'Filed ' + p.key : p.pr ? 'Opened PR #' + p.pr : p.tool === 'confluence' ? 'Published release notes' : 'Artifact created';
-    case 'TaskAssigned': return 'Assigned to ' + p.role + (p.source === 'slack' ? ' (Slack change)' : '');
-    case 'TaskCompleted': return 'Completed: ' + (p.summary || '');
-    case 'TaskFailed': return 'FAILED: ' + (p.summary || '');
-    case 'ConflictDetected': return 'Conflict: ' + (p.diagnosis || '').slice(0, 70);
-    case 'RecoveryInitiated': return 'Recovery: re-tasking ' + p.retaskedRole;
+    case 'LooperDecision': return 'decided: ' + p.action;
+    case 'ArtifactCreated': return p.tool === 'jira' ? 'filed ' + p.key : p.pr ? 'opened PR #' + p.pr : p.tool === 'confluence' ? 'published release notes' : 'artifact created';
+    case 'TaskAssigned': return 'assigned → ' + p.role + (p.source === 'slack' ? ' (Slack change)' : '');
+    case 'TaskCompleted': return p.summary || 'completed';
+    case 'TaskFailed': return 'FAILED — ' + (p.summary || '');
+    case 'ConflictDetected': return 'conflict: ' + (p.diagnosis || '');
+    case 'RecoveryInitiated': return 'recovery → re-tasking ' + p.retaskedRole;
     case 'HumanApprovalRequested': return 'GATE: prod deploy needs approval';
-    case 'HumanApproved': return 'Human approved prod deploy';
-    case 'DeployRequested': return 'Deploy requested: ' + p.environment;
-    case 'Deployed': return 'Deployed ' + p.environment + ' → ' + (p.url || '');
-    case 'AgentThinking': return 'Thinking: ' + (p.text || '').slice(0, 60);
-    case 'AgentToolCall': return 'Tool: ' + (p.tool || '') + '.' + (p.action || '');
-    case 'PlanReady': return 'Plan ready: ' + p.taskCount + ' tasks';
-    case 'ObjectiveReceived': return 'Objective received';
+    case 'HumanApproved': return 'human approved prod deploy';
+    case 'DeployRequested': return 'deploy requested: ' + p.environment;
+    case 'Deployed': return 'deployed ' + p.environment + ' → ' + (p.url || '');
+    case 'AgentThinking': return 'thinking: ' + (p.text || '');
+    case 'AgentToolCall': return p.tool + '.' + p.action + (p.files ? ' (' + p.files.length + ' files)' : '');
+    case 'PlanReady': return 'plan ready — ' + p.taskCount + ' tasks';
+    case 'ObjectiveReceived': return 'objective received';
     default: return e.type;
   }
 }

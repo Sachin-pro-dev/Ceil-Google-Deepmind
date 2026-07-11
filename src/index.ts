@@ -94,7 +94,7 @@ export async function bootstrap(opts: { stepDelayMs?: number } = {}): Promise<Ru
   const builder = new BuilderAgent({ gemini, github, memory, bus });
   const qa = new QAAgent({ github, memory, bus });
   const supervisor = new SupervisorAgent({ gemini, memory, bus });
-  const looper = new Looper({ memory, bus, gemini, jira, slack, confluence, manager, planning, builder, qa, supervisor });
+  const looper = new Looper({ memory, bus, gemini, jira, slack, confluence, github, manager, planning, builder, qa, supervisor });
 
   log.info({ agentMode: config.agentMode, toolsMode: config.toolsMode, llmMode: config.llmMode }, 'runtime ready');
   return { memory, cache, mirror, bus, runner, workRunner, gemini, jira, github, slack, confluence, manager, planning, builder, qa, supervisor, looper };

@@ -43,6 +43,10 @@ export interface GitHubAdapter {
   openPR(input: { branch: string; title: string }): Promise<PullRequest>;
   /** GitHub Actions: run/inspect CI checks for a PR. */
   runChecks(prNumber: number): Promise<CheckRun>;
+  /** Merge `head` into `base` (real merge commit). Returns the merge sha ('' if already merged). */
+  mergeBranch(head: string, base: string, message?: string): Promise<{ sha: string }>;
+  /** The repo's default branch (e.g. "main"). */
+  getDefaultBranch(): Promise<string>;
 }
 
 /** In-memory GitHub stand-in with deterministic shas/PR numbers under the config repo URL. */
@@ -72,6 +76,17 @@ export class MockGitHubAdapter implements GitHubAdapter {
     const number = this.prCount + 100;
     log.info({ pr: number, branch: input.branch }, 'opened mock PR');
     return { number, url: `${this.repo}/pull/${number}`, title: input.title, branch: input.branch };
+  }
+
+  async mergeBranch(head: string, base: string): Promise<{ sha: string }> {
+    this.commitCount += 1;
+    const sha = `m${String(this.commitCount).padStart(6, '0')}e49e`;
+    log.info({ head, base, sha }, 'merged mock branch');
+    return { sha };
+  }
+
+  async getDefaultBranch(): Promise<string> {
+    return 'main';
   }
 
   async runChecks(prNumber: number): Promise<CheckRun> {

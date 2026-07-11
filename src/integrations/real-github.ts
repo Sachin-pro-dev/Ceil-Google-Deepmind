@@ -45,6 +45,41 @@ export class RealGitHubAdapter implements GitHubAdapter {
     return this.defaultBranch;
   }
 
+  async getDefaultBranch(): Promise<string> {
+    return this.base();
+  }
+
+  /**
+   * Merge `head` into `base` via the Merges API (a real merge commit).
+   * 201 = merged; 204 = base already contains head (no-op); 409 = conflict.
+   */
+  async mergeBranch(head: string, base: string, message?: string): Promise<{ sha: string }> {
+    const res = await fetch(`${config.github.apiUrl}/repos/${this.repo}/merges`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${config.github.token}`,
+        Accept: 'application/vnd.github+json',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ base, head, commit_message: message ?? `Ceil: merge ${head} into ${base}` }),
+    });
+    if (res.status === 204) {
+      log.info({ head, base }, 'already merged');
+      return { sha: '' };
+    }
+    if (res.status === 409) {
+      const t = await res.text();
+      throw new Error(`merge conflict merging ${head} into ${base}: ${t.slice(0, 200)}`);
+    }
+    if (!res.ok) {
+      const t = await res.text();
+      throw new Error(`GitHub merge ${head}->${base} HTTP ${res.status}: ${t.slice(0, 200)}`);
+    }
+    const data = (await res.json()) as { sha: string };
+    log.info({ head, base, sha: data.sha }, 'merged branch');
+    return { sha: data.sha };
+  }
+
   async createBranch(name: string): Promise<{ branch: string }> {
     const base = await this.base();
     // 409 = repository is empty (no initial commit): bootstrap it with a README.

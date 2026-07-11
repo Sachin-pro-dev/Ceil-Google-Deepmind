@@ -34,7 +34,12 @@ export async function startServer() {
   };
 
   app.get('/', async (_req, reply) => reply.type('text/html').send(consoleHtml));
-  app.get('/health', async () => ({ status: 'ok', env: config.env }));
+  app.get('/health', async () => ({
+    status: 'ok',
+    env: config.env,
+    llm: config.llmMode,
+    tools: config.toolsMode,
+  }));
 
   /** Start a new objective; the Looper drives it in the background. */
   app.post('/api/objectives', async (req) => {

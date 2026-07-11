@@ -6,6 +6,7 @@ export const EVENT_TYPES = [
   'PlanReady',
   'TaskAssigned',
   'SandboxSpawned',
+  'LooperDecision',
   'AgentThinking',
   'AgentToolCall',
   'ArtifactCreated',

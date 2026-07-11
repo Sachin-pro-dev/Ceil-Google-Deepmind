@@ -19,7 +19,24 @@ const envSchema = z.object({
   AGENT_BASE: z.string().default('antigravity-preview-05-2026'),
   MODEL_FLASH: z.string().default('gemini-3.5-flash'),
   MODEL_PRO: z.string().default('gemini-3.1-pro-preview'),
+  // Per-role model overrides (fast Flash for chatty ticks, Pro for planning).
+  MODEL_MANAGER: z.string().default('gemini-3.5-flash'),
+  MODEL_PLANNING: z.string().default('gemini-3.1-pro-preview'),
+  MODEL_LOOPER: z.string().default('gemini-3.5-flash'),
+  // "mock" = canned deterministic LLM output (no key, no quota); "real" = live Gemini.
+  LLM_MODE: z.enum(['mock', 'real']).default('mock'),
+  // Builder work engine: "gemini" = direct Gemini calls (offline-capable);
+  // "iapi" = real Managed-Agent sandboxes via the Interactions API.
+  AGENT_MODE: z.enum(['gemini', 'iapi']).default('gemini'),
+  IAPI_TIMEOUT_MS: z.coerce.number().int().positive().default(300000),
+  // Target repo the builders "work" on (mock GitHub adapter mints URLs under this).
+  GITHUB_REPO_URL: z.string().default('https://github.com/ceil/demo'),
+  // Demo lever: make the FIRST QA check run fail so the Supervisor recovery is visible.
+  INJECT_QA_FAILURE: z.enum(['true', 'false']).default('false'),
+  STAGING_URL: z.string().default('https://staging.ceil-demo.app'),
+  PROD_URL: z.string().default('https://ceil-demo.app'),
   LOOPER_TICK_MS: z.coerce.number().int().positive().default(3000),
+  LOOPER_MAX_TICKS: z.coerce.number().int().positive().default(30),
   GCP_PROJECT_ID: z.string().default(''),
 });
 
@@ -34,8 +51,22 @@ export const config = {
   geminiApiKey: parsed.GEMINI_API_KEY,
   iapiBaseUrl: parsed.IAPI_BASE_URL,
   agentBase: parsed.AGENT_BASE,
-  models: { flash: parsed.MODEL_FLASH, pro: parsed.MODEL_PRO },
+  llmMode: parsed.LLM_MODE,
+  agentMode: parsed.AGENT_MODE,
+  iapiTimeoutMs: parsed.IAPI_TIMEOUT_MS,
+  githubRepoUrl: parsed.GITHUB_REPO_URL,
+  injectQaFailure: parsed.INJECT_QA_FAILURE === 'true',
+  stagingUrl: parsed.STAGING_URL,
+  prodUrl: parsed.PROD_URL,
+  models: {
+    flash: parsed.MODEL_FLASH,
+    pro: parsed.MODEL_PRO,
+    manager: parsed.MODEL_MANAGER,
+    planning: parsed.MODEL_PLANNING,
+    looper: parsed.MODEL_LOOPER,
+  },
   looperTickMs: parsed.LOOPER_TICK_MS,
+  looperMaxTicks: parsed.LOOPER_MAX_TICKS,
   gcpProjectId: parsed.GCP_PROJECT_ID,
 } as const;
 

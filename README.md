@@ -7,19 +7,32 @@ agent-to-agent DMs), coordinated by a heartbeat **Looper** that re-plans continu
 
 > Hackathon: Google DeepMind Bangalore — Problem Statement 2 (Autonomous Orchestration).
 
-## Status — Phase 1: Foundation ✅
+## Status — Phases 1–5 ✅ (of 6)
 
-The runtime spine is in place and runs fully offline (no cloud, no Docker):
+- **Phase 1 — Foundation:** config, logging, Shared Memory schema (6 tables) on **PGlite**,
+  typed event bus with dual-write persistence, `AgentRunner` interface + mock.
+- **Phase 2 — Core Trio:** `GeminiClient` (mock/real via `LLM_MODE`), **Manager** +
+  **Planning** agents, **Looper** heartbeat. Prompt in → strategy → tasks → Jira tickets.
+- **Phase 3 — Builders + GitHub:** **Database/Backend/Frontend builder agents** (backend+frontend
+  run in parallel) + **QA agent** (GitHub Actions checks). Work engine selectable via
+  `AGENT_MODE`: `gemini` (direct calls, offline-capable) or `iapi` (real Managed-Agent
+  sandboxes via `/v1beta/agents` + `/v1beta/interactions`). Full pipeline:
+  prompt → tickets → PRs → QA checks → **delivered**.
 
-- Centralized, validated config (`src/config.ts`) and pino logging with secret redaction.
-- Shared Memory schema (6 tables, indexed) on **PGlite** (embedded Postgres) via Drizzle ORM.
-- In-process **event bus** with a typed event taxonomy and dual-write persistence
-  (durable Postgres log + real-time mirror for the Console).
-- **AgentRunner** interface shaped to the real iAPI two-step model, plus a **MockAgentRunner**
-  ("dummy agent that logs events") to exercise the whole spine with zero quota.
+- **Phase 4 — Live replanning + Supervisor + governance:** Slack inbound polled every Looper
+  tick — a mid-flight requirement change **replans the org without restart**. The
+  **Supervisor** detects failed QA by reading Shared Memory, diagnoses, emits
+  `ConflictDetected`/`RecoveryInitiated`, re-tasks the builder, and QA re-verifies. Staging
+  deploys autonomously (Autonomy Level 4); **production blocks on human approval**.
+- **Phase 5 — Console + Confluence:** dark-mode mission-control Console (org chart with live
+  status glows, event stream, Looper tick panel, artifacts feed, Slack injector, prod-approval
+  gate button) served at `http://localhost:8080`, polling the state API. Release notes are
+  published to Confluence + a Slack summary on prod deploy.
 
-Later phases add the real iAPI adapter, the Looper, builder agents, MCP tool integrations,
-the Console, and the cloud (Cloud SQL / Firestore / Redis / Pub/Sub) adapters.
+Remaining: Phase 6 (demo prep). All external tools (Jira/GitHub/Slack/Confluence) run as
+mock adapters — fully functional, zero external side effects; real MCP wiring is the
+post-hackathon path. Note: the Console is a static page served by Fastify (deviation from
+the PRD's Next.js + React Flow stack, chosen for the hackathon window).
 
 ## Architecture (local adapters ↔ cloud adapters)
 
@@ -48,10 +61,18 @@ cp .env.local.example .env.local        # never commit .env.local
 # 3. Generate SQL migrations from the schema
 npm run db:generate
 
-# 4. Run the Phase 1 demo — drives the spine end-to-end and prints the result
-npm run demo:phase1
+# 4. THE DEMO: start the Console and open http://localhost:8080
+npm run dev
+#    - type an objective, tick "stage a QA failure", click "Spawn the org"
+#    - watch the org chart work; drop a Slack change mid-run; approve the prod gate
 
-# 5. Run the integration test (in-memory, touches nothing external)
+# 5. Terminal demos — each drives its phase end-to-end and prints the result
+npm run demo:phase1   # runtime spine
+npm run demo:phase2   # Core Trio: prompt -> strategy -> tasks -> tickets
+npm run demo:phase3   # full pipeline: prompt -> tickets -> PRs -> QA -> delivered
+npm run demo:phase4   # recovery + live replanning + governance gate
+
+# 6. Run the tests (in-memory, touches nothing external)
 npm test
 
 # Optional: start the HTTP skeleton (GET /health, POST /objectives)

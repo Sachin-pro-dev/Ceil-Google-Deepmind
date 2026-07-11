@@ -30,6 +30,16 @@ export class SharedMemory {
     return row;
   }
 
+  /** Update an objective's status (e.g. 'planned'). */
+  async updateObjectiveStatus(id: string, status: string) {
+    const [row] = await this.db
+      .update(objectives)
+      .set({ status })
+      .where(eq(objectives.id, id))
+      .returning();
+    return row;
+  }
+
   /** Create a task under an objective (default status 'pending'). */
   async createTask(input: {
     objectiveId: string;
@@ -127,6 +137,33 @@ export class SharedMemory {
       })
       .returning();
     return row;
+  }
+
+  /** List Looper decisions for an objective, newest first (Console Loop Trace). */
+  async listDecisions(objectiveId: string) {
+    return this.db
+      .select()
+      .from(decisions)
+      .where(eq(decisions.objectiveId, objectiveId))
+      .orderBy(desc(decisions.timestamp));
+  }
+
+  /** List all artifacts for an objective (joined through its tasks). */
+  async listArtifacts(objectiveId: string) {
+    return this.db
+      .select({
+        id: artifacts.id,
+        taskId: artifacts.taskId,
+        type: artifacts.type,
+        externalUrl: artifacts.externalUrl,
+        metadata: artifacts.metadata,
+        createdAt: artifacts.createdAt,
+        role: tasks.role,
+      })
+      .from(artifacts)
+      .innerJoin(tasks, eq(artifacts.taskId, tasks.id))
+      .where(eq(tasks.objectiveId, objectiveId))
+      .orderBy(desc(artifacts.createdAt));
   }
 
   /** Persist a Looper decision for a tick (consumed from Phase 2). */

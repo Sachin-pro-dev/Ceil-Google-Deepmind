@@ -1,103 +1,141 @@
 # Ceil
 
-A live-replanning multi-agent orchestration runtime for the enterprise, built on Google's
-Interactions API (iAPI) and Managed Agents. Ceil takes one open-ended objective and delivers
-it end-to-end through a team of role-scoped agents that hand off via **Shared Memory** (never
-agent-to-agent DMs), coordinated by a heartbeat **Looper** that re-plans continuously.
+**A live-replanning multi-agent runtime for the enterprise — built on Google's Interactions API (iAPI) and Managed Agents.**
 
-> Hackathon: Google DeepMind Bangalore — Problem Statement 2 (Autonomous Orchestration).
+> Antigravity gives you one Managed Agent inside an IDE. **Ceil gives you an engineering department.**
 
-## Status — Phases 1–5 ✅ (of 6)
+Type one objective — *"Build a Leave Management module with role-based approvals and an admin dashboard"* — and Ceil spawns an AI engineering organization that plans the work, files **real Jira tickets**, writes **real code** committed as **real GitHub pull requests**, verifies it, recovers from its own failures, folds in requirement changes dropped into **Slack mid-build**, and ships to `main` behind a human governance gate.
 
-- **Phase 1 — Foundation:** config, logging, Shared Memory schema (6 tables) on **PGlite**,
-  typed event bus with dual-write persistence, `AgentRunner` interface + mock.
-- **Phase 2 — Core Trio:** `GeminiClient` (mock/real via `LLM_MODE`), **Manager** +
-  **Planning** agents, **Looper** heartbeat. Prompt in → strategy → tasks → Jira tickets.
-- **Phase 3 — Builders + GitHub:** **Database/Backend/Frontend builder agents** (backend+frontend
-  run in parallel) + **QA agent** (GitHub Actions checks). Work engine selectable via
-  `AGENT_MODE`: `gemini` (direct calls, offline-capable) or `iapi` (real Managed-Agent
-  sandboxes via `/v1beta/agents` + `/v1beta/interactions`). Full pipeline:
-  prompt → tickets → PRs → QA checks → **delivered**.
+Built solo for the **Google DeepMind Bangalore Hackathon** — Problem Statement 2: *Autonomous Orchestration with Managed Agents (iAPI)*.
 
-- **Phase 4 — Live replanning + Supervisor + governance:** Slack inbound polled every Looper
-  tick — a mid-flight requirement change **replans the org without restart**. The
-  **Supervisor** detects failed QA by reading Shared Memory, diagnoses, emits
-  `ConflictDetected`/`RecoveryInitiated`, re-tasks the builder, and QA re-verifies. Staging
-  deploys autonomously (Autonomy Level 4); **production blocks on human approval**.
-- **Phase 5 — Console + Confluence:** dark-mode mission-control Console (org chart with live
-  status glows, event stream, Looper tick panel, artifacts feed, Slack injector, prod-approval
-  gate button) served at `http://localhost:8080`, polling the state API. Release notes are
-  published to Confluence + a Slack summary on prod deploy.
+---
 
-Remaining: Phase 6 (demo prep). All external tools (Jira/GitHub/Slack/Confluence) run as
-mock adapters — fully functional, zero external side effects; real MCP wiring is the
-post-hackathon path. Note: the Console is a static page served by Fastify (deviation from
-the PRD's Next.js + React Flow stack, chosen for the hackathon window).
+## What a run looks like
 
-## Architecture (local adapters ↔ cloud adapters)
+1. **Plan** — a Manager agent (Gemini 3.5 Flash) writes a delivery strategy; a Planning agent (Gemini 3.1 Pro, structured output) decomposes it into role-scoped tasks and files real Jira tickets (REST v3).
+2. **Build in parallel** — Database, Backend, and Frontend agents generate actual code files (TypeScript/SQL) via schema-constrained Gemini calls, commit them to real feature branches, and open real GitHub PRs.
+3. **Verify** — a QA agent inspects CI check runs on every PR.
+4. **Self-heal** — on a failure, the Supervisor agent reads it from Shared Memory, produces an LLM diagnosis, emits `ConflictDetected` / `RecoveryInitiated`, spawns a fix task for the responsible builder, and re-queues QA. No human input.
+5. **Replan live** — type a requirement change into the real Slack channel mid-build; the Looper picks it up on its next tick, new tasks and tickets appear, and the org rewires **without restarting**.
+6. **Ship under governance** — at Autonomy Level 4, Ceil auto-merges all feature branches into `staging`; production blocks on human approval (Console button + Slack message). On approval it merges `staging → main` and publishes release notes.
 
-| Concern            | Local (default)                    | Cloud (deploy phase)   |
-| ------------------ | ---------------------------------- | ---------------------- |
-| Durable memory     | PGlite (embedded) via Drizzle      | Cloud SQL Postgres     |
-| Hot cache          | in-memory `HotCache`               | Memorystore Redis      |
-| Real-time mirror   | in-memory `RealtimeMirror`         | Firestore              |
-| Event bus          | in-process `EventBus`              | Cloud Pub/Sub          |
-| Agent runtime      | `MockAgentRunner`                  | iAPI via `@google/genai` |
+Every artifact is real and clickable: tickets on the Jira board, merged PRs and final code on `main`, bot messages in Slack.
 
-Everything is swapped by the `CEIL_ENV` config flag. Local implementations are real and
-fully functional, not stubs.
+## The track's four questions, answered architecturally
+
+**1. How do agents hand off without losing context?**
+Agents never exchange messages — there are no agent-to-agent DMs anywhere in the system. All state lives in a canonical **Shared Memory** (six-table relational schema: `objectives`, `tasks`, `artifacts`, `events`, `agent_sessions`, `decisions`). The **Looper** synthesizes a fresh, minimal, purpose-built prompt for each agent from current memory on every dispatch. Context cannot bleed, bloat, or get lost — chat history is never the transport; the database is.
+
+**2. How do agents safely use tools and APIs?**
+Tool access is **role-scoped at spawn time**: the adapter set injected into each agent is fixed by its role — the Backend agent has no Jira handle to misuse; the constraint is structural, not a system-prompt promise. Credentials never enter agent context (env config only, redacted from all logs), mirroring iAPI's egress-proxy header-transform model. Every tool call and artifact write is published as a typed event into an append-only audit log.
+
+**3. How do agents split labor and resolve conflicts?**
+Role-typed agents with disjoint responsibilities (Planning decomposes but never codes; QA verifies but never merges) and a three-tier conflict model: the Looper auto-cancels stale work → the Supervisor diagnoses failures and re-tasks builders → humans are escalated to only at the governance gate. All of it is visible live in the Console.
+
+**4. How does it tackle objectives a single agent would fail?**
+Parallel role execution (backend + frontend build concurrently in separate lanes), bounded per-agent context, a distinct verifier tier, and continuous replanning — the plan is re-derived from world state every 3 seconds, not fixed at t=0.
+
+## Architecture
+
+```
+┌─────────────────────────────────────────────────────────┐
+│  Ceil Console (dark-mode mission control, :8080)        │
+│  org chart · activity stream · Looper panel ·           │
+│  code drawer · artifacts feed · approval gate           │
+└──────────────────────┬──────────────────────────────────┘
+                       │ polls JSON state API
+┌──────────────────────┴──────────────────────────────────┐
+│  Orchestration Runtime (Node 22 + TypeScript + Fastify) │
+│                                                         │
+│   LOOPER (3s heartbeat)                                 │
+│   read state snapshot → decide next action →            │
+│   narrate via Gemini → record decision → route          │
+│                                                         │
+│   Shared Memory (Postgres/PGlite via Drizzle)           │
+│   Event Bus (16 typed events, zod-validated)            │
+│   Role agents: Manager · Planning · Backend ·           │
+│   Frontend · Database · QA · Supervisor                 │
+└───────┬───────────────┬──────────────┬─────────────────┘
+        │               │              │
+   GitHub REST     Jira REST v3    Slack Web API
+   (branches,      (real tickets)  (posts + inbound
+   commits, PRs,                    polling → replan)
+   merges, checks)
+```
+
+- **The Looper** — a deterministic-core replanner: each tick reads a bounded state snapshot (tasks, artifacts, events, unread Slack), derives the next action through a 12-state pipeline (`spawn_manager → spawn_planning → create_tickets → replan / recover → run_database → run_builders → run_qa → deploy_staging → await_approval → deploy_prod → complete`), narrates its reasoning via Gemini, and records every decision for a fully replayable trace. Deterministic selection + LLM narration = predictable *and* explainable.
+- **LLM layer** — direct Gemini calls (`x-goog-api-key`), JSON mode + zod validation with automatic retry on malformed output. Model routing per role: Flash for latency-critical ticks and builders, Pro for planning. An **iAPI Managed-Agent adapter** implements the two-step `POST /v1beta/agents` → `POST /v1beta/interactions` shape with persistent `environment_id` reuse (`AGENT_MODE=iapi`).
+- **Dual-implementation integrations** — every external tool sits behind an interface with two complete implementations: live REST adapters (GitHub Contents/Pulls/Merges/Checks · Slack `chat.postMessage` + `conversations.history` · Jira REST v3 with project auto-discovery) and offline mocks with identical contracts. One env flag (`TOOLS_MODE=mock|real`) flips the entire system — the demo kill-switch.
+- **Autonomy Slider** — six levels from dry-run to full-auto. The demo runs Level 4: staging merges autonomously, production requires a human.
 
 ## How to run
 
-Requires Node.js >= 20.
+Requires Node.js ≥ 20. No Docker, no cloud account, no API keys needed for mock mode.
 
 ```bash
-# 1. Install dependencies
-npm install
+git clone https://github.com/Sachin-pro-dev/Ceil-Google-Deepmind.git
+cd Ceil-Google-Deepmind
+npm ci
 
-# 2. Configure (copy the template; defaults are fine for local Phase 1)
-cp .env.local.example .env.local        # never commit .env.local
-
-# 3. Generate SQL migrations from the schema
-npm run db:generate
-
-# 4. THE DEMO: start the Console and open http://localhost:8080
-npm run dev
-#    - type an objective, tick "stage a QA failure", click "Spawn the org"
-#    - watch the org chart work; drop a Slack change mid-run; approve the prod gate
-
-# 5. Terminal demos — each drives its phase end-to-end and prints the result
-npm run demo:phase1   # runtime spine
-npm run demo:phase2   # Core Trio: prompt -> strategy -> tasks -> tickets
-npm run demo:phase3   # full pipeline: prompt -> tickets -> PRs -> QA -> delivered
-npm run demo:phase4   # recovery + live replanning + governance gate
-
-# 6. Run the tests (in-memory, touches nothing external)
-npm test
-
-# Optional: start the HTTP skeleton (GET /health, POST /objectives)
+# THE DEMO: start the Console and open http://localhost:8080
 npm run dev
 ```
 
-## Configuration
+Type an objective, tick "stage a QA failure", click **Spawn the org** — then click any builder node to watch the code it wrote, send a requirement change from the Slack box, and approve the production gate when it appears.
 
-All configurable values live in `.env.local` and are read only through `src/config.ts`.
-Models are pinned to `gemini-3.5-flash` (role agents) and `gemini-3.1-pro-preview`
-(Looper/Planning); base agent `antigravity-preview-05-2026`. **Secrets go only in
-`.env.local`, which is gitignored — never commit them.**
+### Modes
+
+Everything defaults to **mock mode**: fully functional offline stand-ins, zero external side effects, zero quota. To go live, copy `.env.local.example` → `.env.local` and set:
+
+| Flag | Values | Effect |
+|---|---|---|
+| `LLM_MODE` | `mock` / `real` | canned reasoning ↔ live Gemini (needs `GEMINI_API_KEY`) |
+| `TOOLS_MODE` | `mock` / `real` | offline SDLC ↔ real GitHub + Jira + Slack (needs tokens) |
+| `AGENT_MODE` | `gemini` / `iapi` | direct Gemini work engine ↔ real Managed-Agent sandboxes |
+
+Secrets live only in `.env.local` (gitignored). Logs redact all keys.
+
+### Terminal demos & tests
+
+```bash
+npm run demo:phase1   # runtime spine: events -> memory -> mirror
+npm run demo:phase2   # prompt -> strategy -> tasks -> Jira tickets
+npm run demo:phase3   # full pipeline: tickets -> PRs -> QA -> deploy gate
+npm run demo:phase4   # QA failure -> Supervisor recovery + Slack replan + gate
+npm test              # 13 integration tests, fully offline (in-memory Postgres)
+```
+
+## Stack
+
+TypeScript · Node.js 22 · Fastify · **Gemini 3.5 Flash + Gemini 3.1 Pro** (Interactions API) · Managed Agents (`antigravity-preview-05-2026`) · PGlite/Postgres + Drizzle ORM · zod · pino · GitHub / Jira Cloud / Slack REST APIs · vitest
 
 ## Layout
 
 ```
 src/
-  config.ts            centralized config
-  logger.ts            pino logger (secret-redacting)
-  db/                  schema.ts, client.ts (PGlite), migrate.ts
-  memory/              shared-memory.ts, hot-cache.ts, realtime-mirror.ts
-  bus/                 events.ts, event-bus.ts, persist.ts
-  agents/              agent-runner.ts (interface), mock-agent-runner.ts
-  index.ts             composition root (bootstrap)
-  server.ts            minimal Fastify HTTP surface
-scripts/               migrate.ts, phase1-demo.ts
-test/                  spine.test.ts
+  config.ts             centralized zod-validated config (no hardcoded values)
+  logger.ts             pino, secret-redacting
+  db/                   schema (6 tables), PGlite client, migrations
+  memory/               SharedMemory repository · hot cache · realtime mirror
+  bus/                  typed event taxonomy · in-process bus · dual-write persistence
+  llm/gemini.ts         Gemini client: JSON mode + zod validation + retry
+  agents/
+    agent-runner.ts     AgentRunner interface (iAPI two-step shape)
+    iapi-agent-runner.ts  real Managed-Agent sandboxes (/v1beta/agents + /interactions)
+    gemini-agent-runner.ts offline-capable work engine
+    roles/              manager · planning · builder · qa · supervisor
+  looper/looper.ts      the live replanner (12-action pipeline)
+  integrations/         jira · github · slack · confluence — mock + real adapters
+  console/index.html    mission-control UI
+  server.ts             Fastify: Console + state API + approval gate
+scripts/                per-phase demos · migration · live smoke tests
+test/                   13 offline integration tests
 ```
+
+## Design lineage
+
+Ceil is Andrej Karpathy's generator-verifier loop + autonomy-slider pattern (YC AI Startup School, 2025) applied at organization scale: context engineering per agent, orchestrated LLM calls over a live DAG, a human-in-the-loop GUI, and a per-environment autonomy slider — scaled from one assistant to a department.
+
+## Author
+
+**Sachin Baluragi** — solo build, with Claude Code as build accelerant.

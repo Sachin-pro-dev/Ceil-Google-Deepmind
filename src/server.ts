@@ -83,6 +83,92 @@ export async function startServer() {
     return { approved: true };
   });
 
+  /** List user-defined custom agents (Console sidebar). */
+  app.get('/api/agents', async () => ({ agents: await rt.memory.listCustomAgents() }));
+
+  /** Create a custom agent from a name + description. */
+  app.post('/api/agents', async (req, reply) => {
+    const body = (req.body ?? {}) as { name?: string; description?: string };
+    const name = body.name?.trim();
+    const description = body.description?.trim();
+    if (!name || !description) {
+      reply.code(400);
+      return { error: 'name and description are required' };
+    }
+    const agent = await rt.memory.createCustomAgent({ name, description });
+    log.info({ slug: agent.slug }, 'custom agent created');
+    return { agent };
+  });
+
+  /**
+   * Drop an agent into a running workflow: creates a task for it (persona folded
+   * into the prompt), files a Jira ticket, re-opens QA, reactivates the pipeline,
+   * and resumes the Looper. `agentId` = custom agent; `role` = extra built-in
+   * builder (backend/frontend/database).
+   */
+  app.post('/api/objectives/:id/add-agent', async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const body = (req.body ?? {}) as { agentId?: string; role?: string };
+    const objective = await rt.memory.getObjective(id);
+    if (!objective) {
+      reply.code(404);
+      return { error: 'objective not found' };
+    }
+
+    let role: string;
+    let prompt: string;
+    if (body.agentId) {
+      const agent = await rt.memory.getCustomAgent(body.agentId);
+      if (!agent) {
+        reply.code(404);
+        return { error: 'agent not found' };
+      }
+      role = agent.slug;
+      prompt = `You are "${agent.name}": ${agent.description}. Apply your specialty to the objective: ${objective.prompt}`;
+    } else if (body.role && ['backend', 'frontend', 'database'].includes(body.role)) {
+      role = body.role;
+      prompt = `Additional ${body.role} workstream requested by the user for the objective: ${objective.prompt}`;
+    } else {
+      reply.code(400);
+      return { error: 'agentId or a builder role is required' };
+    }
+
+    const task = await rt.memory.createTask({ objectiveId: id, role, prompt });
+    await rt.bus.publish({
+      type: 'TaskAssigned',
+      objectiveId: id,
+      taskId: task.id,
+      agentRole: 'looper',
+      payload: { role, source: 'drag-drop', title: prompt.slice(0, 80) },
+    });
+    // Real Jira ticket for the new workstream.
+    const ticket = await rt.jira.createTicket({ title: prompt.slice(0, 120), description: prompt });
+    await rt.memory.recordArtifact({
+      taskId: task.id,
+      type: 'jira',
+      externalUrl: ticket.url,
+      metadata: { key: ticket.key, title: ticket.title },
+    });
+    await rt.bus.publish({
+      type: 'ArtifactCreated',
+      objectiveId: id,
+      taskId: task.id,
+      agentRole: 'planning',
+      payload: { tool: 'jira', key: ticket.key, url: ticket.url },
+    });
+
+    // Re-open verification and (if already shipped/gated) reactivate the pipeline.
+    const tasks = await rt.memory.listTasks(id);
+    const qa = tasks.find((t) => t.role === 'qa' && t.status === 'completed');
+    if (qa) await rt.memory.updateTaskStatus(qa.id, 'pending');
+    if (['staged', 'approved', 'delivered'].includes(objective.status)) {
+      await rt.memory.updateObjectiveStatus(id, 'active');
+    }
+    drive(id);
+    log.info({ objectiveId: id, role }, 'agent dropped into workflow');
+    return { task };
+  });
+
   /** Simulated inbound Slack message (the live-replanning demo lever). */
   app.post('/api/slack', async (req) => {
     const body = (req.body ?? {}) as { text?: string };

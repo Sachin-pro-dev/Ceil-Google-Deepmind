@@ -40,6 +40,7 @@ export type LooperAction =
   | 'recover'
   | 'run_database'
   | 'run_builders'
+  | 'run_custom'
   | 'run_qa'
   | 'deploy_staging'
   | 'await_approval'
@@ -55,6 +56,7 @@ interface LooperState {
   failedQa: number;
   pendingDatabase: number;
   pendingCode: number;
+  pendingCustom: number;
   pendingQa: number;
 }
 
@@ -115,6 +117,8 @@ export class Looper {
       failedQa: byStatus('qa', 'failed'),
       pendingDatabase: byStatus('database', 'pending'),
       pendingCode: byStatus('backend', 'pending') + byStatus('frontend', 'pending'),
+      // User-defined agents dropped into the workflow (roles prefixed "agent-").
+      pendingCustom: tasks.filter((t) => t.role.startsWith('agent-') && t.status === 'pending').length,
       pendingQa: byStatus('qa', 'pending'),
     };
 
@@ -126,6 +130,7 @@ export class Looper {
     else if (state.failedQa > 0) action = 'recover';
     else if (state.pendingDatabase > 0) action = 'run_database';
     else if (state.pendingCode > 0) action = 'run_builders';
+    else if (state.pendingCustom > 0) action = 'run_custom';
     else if (state.pendingQa > 0) action = 'run_qa';
     else if (objective.status === 'active') action = 'deploy_staging';
     else if (objective.status === 'staged') action = 'await_approval';
@@ -271,6 +276,18 @@ export class Looper {
         const code = [...pendingOf('backend'), ...pendingOf('frontend')];
         await Promise.all(
           code.map((t) =>
+            this.deps.builder.run({ id: t.id, objectiveId, role: t.role, prompt: t.prompt ?? '' }),
+          ),
+        );
+        break;
+      }
+
+      case 'run_custom': {
+        // User-dropped agents execute like builders: their persona is folded into
+        // the task prompt at drop time; output is real code -> real PR.
+        const custom = tasks.filter((t) => t.role.startsWith('agent-') && t.status === 'pending');
+        await Promise.all(
+          custom.map((t) =>
             this.deps.builder.run({ id: t.id, objectiveId, role: t.role, prompt: t.prompt ?? '' }),
           ),
         );

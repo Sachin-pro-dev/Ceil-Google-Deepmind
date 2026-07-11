@@ -76,6 +76,15 @@ export const agentSessions = pgTable('agent_sessions', {
   lastActive: timestamp('last_active', { withTimezone: true }).notNull().defaultNow(),
 });
 
+/** User-defined custom agents (created in the Console, draggable into workflows). */
+export const customAgents = pgTable('custom_agents', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  name: text('name').notNull(),
+  slug: text('slug').notNull().unique(),
+  description: text('description').notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
 /** Looper decisions per tick (reasoning + emitted deltas); consumed from Phase 2. */
 export const decisions = pgTable('decisions', {
   id: uuid('id').defaultRandom().primaryKey(),

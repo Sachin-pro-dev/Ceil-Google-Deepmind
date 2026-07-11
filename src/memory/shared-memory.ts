@@ -5,7 +5,7 @@
  */
 import { eq, desc } from 'drizzle-orm';
 import type { Db } from '../db/client';
-import { objectives, tasks, artifacts, events, agentSessions, decisions } from '../db/schema';
+import { objectives, tasks, artifacts, events, agentSessions, decisions, customAgents } from '../db/schema';
 import type { CeilEvent } from '../bus/events';
 import { childLogger } from '../logger';
 
@@ -164,6 +164,31 @@ export class SharedMemory {
       .innerJoin(tasks, eq(artifacts.taskId, tasks.id))
       .where(eq(tasks.objectiveId, objectiveId))
       .orderBy(desc(artifacts.createdAt));
+  }
+
+  /** Create a user-defined custom agent (Console sidebar). Slug must be unique. */
+  async createCustomAgent(input: { name: string; description: string }) {
+    const slug =
+      'agent-' +
+      input.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 30);
+    const [row] = await this.db
+      .insert(customAgents)
+      .values({ name: input.name, slug, description: input.description })
+      .onConflictDoUpdate({ target: customAgents.slug, set: { description: input.description } })
+      .returning();
+    log.info({ slug }, 'createCustomAgent');
+    return row;
+  }
+
+  /** List all user-defined custom agents. */
+  async listCustomAgents() {
+    return this.db.select().from(customAgents).orderBy(desc(customAgents.createdAt));
+  }
+
+  /** Fetch one custom agent by id. */
+  async getCustomAgent(id: string) {
+    const [row] = await this.db.select().from(customAgents).where(eq(customAgents.id, id));
+    return row;
   }
 
   /** Persist a Looper decision for a tick (consumed from Phase 2). */

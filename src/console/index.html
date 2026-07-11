@@ -4,6 +4,9 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Ceil Console</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&display=swap" rel="stylesheet" />
 <style>
   /* Monochrome design system: black & white primary, 1px borders, minimal accents */
   :root {
@@ -16,11 +19,12 @@
   html,body { height:100%; }
   body { background:var(--bg); color:var(--fg); font:13.5px/1.5 ui-sans-serif,system-ui,'Segoe UI',sans-serif; display:flex; flex-direction:column; overflow:hidden; }
   .mono { font-family:'JetBrains Mono',ui-monospace,Consolas,monospace; }
+  .orbitron { font-family:'Orbitron',ui-sans-serif,sans-serif; }
   ::-webkit-scrollbar { width:8px; height:8px; } ::-webkit-scrollbar-thumb { background:var(--border-strong); border-radius:4px; } ::-webkit-scrollbar-track { background:transparent; }
 
   /* ---------- Header ---------- */
   header { display:flex; align-items:center; gap:14px; padding:0 20px; height:52px; border-bottom:1px solid var(--border); background:var(--bg); flex:none; }
-  #brand { font-weight:800; letter-spacing:.34em; font-size:14px; }
+  #brand { font-family:'Orbitron',sans-serif; font-weight:700; letter-spacing:.3em; font-size:14px; }
   #brand::after { content:''; display:inline-block; width:7px; height:7px; background:var(--fg); border-radius:50%; margin-left:10px; vertical-align:middle; animation:blink 2.4s infinite; }
   @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.2} }
   #objText { color:var(--fg-2); flex:1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-size:13px; }
@@ -32,10 +36,18 @@
   /* ---------- Layout ---------- */
   #main { display:flex; flex:1; min-height:0; }
   #canvas { flex:1; display:flex; flex-direction:column; min-width:0; }
-  #org { flex:1; display:flex; flex-direction:column; justify-content:center; gap:30px; padding:26px; position:relative; background:
+  #org { flex:1; display:flex; flex-direction:column; justify-content:center; gap:34px; padding:26px; position:relative; background:
     radial-gradient(circle at 50% 0%, #131316 0%, var(--bg) 60%); }
-  .tier { display:flex; justify-content:center; gap:16px; }
-  .tlabel { position:absolute; left:26px; color:var(--fg-3); font-size:10px; letter-spacing:.16em; text-transform:uppercase; }
+  #edges { position:absolute; inset:0; width:100%; height:100%; pointer-events:none; z-index:0; }
+  .tier { display:flex; justify-content:center; gap:18px; position:relative; z-index:1; }
+  .tlabel { position:absolute; left:26px; color:var(--fg-3); font-size:10px; letter-spacing:.16em; text-transform:uppercase; z-index:1; }
+
+  /* Edge styles */
+  .edge { stroke:var(--border); stroke-width:1.25; fill:none; transition:stroke .3s; }
+  .edge.active { stroke:var(--fg-2); stroke-dasharray:5 6; animation:march 1s linear infinite; }
+  .edge.recover { stroke:var(--warn); stroke-width:1.5; stroke-dasharray:5 6; animation:march .7s linear infinite; }
+  @keyframes march { to { stroke-dashoffset:-11; } }
+  .orb { filter:drop-shadow(0 0 6px currentColor); }
 
   /* ---------- Nodes ---------- */
   .node { width:186px; border:1px solid var(--border); border-radius:var(--radius); background:var(--panel); padding:12px 14px; position:relative; transition:border-color .25s, box-shadow .25s, transform .15s; }
@@ -49,14 +61,19 @@
   .node.exec .dot { background:var(--fg); animation:blink 1s infinite; }
   .node.done { border-color:var(--border-strong); }
   .node.done .dot { background:var(--ok); }
-  .node.fail { border-color:var(--fail); box-shadow:0 0 18px rgba(248,113,113,.15); }
+  .node.fail { border-color:var(--fail); box-shadow:0 0 18px rgba(248,113,113,.15); animation:shake .4s; }
   .node.fail .dot { background:var(--fail); animation:blink .6s infinite; }
+  @keyframes shake { 0%,100%{transform:translateX(0)} 25%{transform:translateX(-5px)} 50%{transform:translateX(5px)} 75%{transform:translateX(-3px)} }
   .node.recover { border-color:var(--warn); }
   .node.recover .dot { background:var(--warn); animation:blink .8s infinite; }
   .node.gated { border-color:var(--warn); box-shadow:0 0 18px rgba(251,191,36,.12); }
   .node.gated .dot { background:var(--warn); animation:blink 1.4s infinite; }
-  #node-looper { border-style:solid; }
   #node-looper .tick { position:absolute; top:10px; right:12px; font-size:10.5px; color:var(--fg-2); }
+  #node-looper.exec { box-shadow:0 0 0 1px var(--fg), 0 0 34px rgba(250,250,250,.12); }
+  /* Looper radar ring on tick */
+  .ring { position:absolute; left:50%; top:50%; width:20px; height:20px; border:1px solid var(--fg-2); border-radius:50%; transform:translate(-50%,-50%); opacity:0; pointer-events:none; }
+  .ring.go { animation:radar 1.4s ease-out; }
+  @keyframes radar { 0%{opacity:.7; width:20px; height:20px} 100%{opacity:0; width:260px; height:130px; border-radius:50%} }
 
   /* ---------- Bottom bar ---------- */
   #bottom { border-top:1px solid var(--border); background:var(--bg); padding:10px 20px; display:flex; gap:10px; align-items:center; flex:none; flex-wrap:wrap; }
@@ -70,13 +87,16 @@
   .pop a:hover { background:var(--panel); color:var(--fg); }
   .pop .empty { padding:8px; color:var(--fg-3); font-size:12px; }
   #controls { margin-left:auto; display:flex; gap:8px; align-items:center; }
-  input[type=text] { background:var(--panel); border:1px solid var(--border); color:var(--fg); border-radius:8px; padding:0 12px; height:32px; font-size:13px; width:300px; outline:none; }
-  input[type=text]:focus { border-color:var(--fg-2); }
+  .slackbox { display:flex; align-items:center; gap:8px; border:1px solid var(--border); border-radius:10px; background:var(--panel); padding:0 6px 0 12px; height:36px; transition:border-color .2s; }
+  .slackbox:focus-within { border-color:var(--fg-2); }
+  .slackbox svg { flex:none; opacity:.5; }
+  .slackbox input { background:transparent; border:0; color:var(--fg); font-size:13px; width:280px; outline:none; height:100%; }
+  .slackbox button { height:26px; padding:0 12px; font-size:12px; border-radius:7px; }
   button { background:var(--fg); color:var(--bg); border:1px solid var(--fg); border-radius:8px; height:32px; padding:0 15px; font-weight:600; cursor:pointer; font-size:12.5px; }
   button:hover { background:#E4E4E7; }
   button.ghost { background:transparent; color:var(--fg-2); border-color:var(--border); }
   button.ghost:hover { color:var(--fg); border-color:var(--border-strong); background:var(--panel); }
-  button.approve { border-color:var(--warn); background:var(--warn); color:#111; animation:blink 1.6s infinite; }
+  button.approve { border-color:var(--warn); background:var(--warn); color:#111; animation:blink 1.6s infinite; height:36px; }
 
   /* ---------- Activity rail ---------- */
   #rail { width:350px; border-left:1px solid var(--border); background:var(--bg); display:flex; flex-direction:column; min-height:0; flex:none; }
@@ -94,7 +114,7 @@
   #loop .big small { font-size:11px; color:var(--fg-3); font-weight:400; letter-spacing:0; margin-left:6px; }
   #lastDecision { color:var(--fg-3); font-size:11.5px; margin-top:4px; display:block; overflow:hidden; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; }
 
-  /* ---------- Code drawer (Sandbox Peek) ---------- */
+  /* ---------- Code drawer ---------- */
   #drawer { position:fixed; top:0; right:-620px; width:600px; height:100%; background:var(--bg); border-left:1px solid var(--border-strong); z-index:50; display:flex; flex-direction:column; transition:right .28s cubic-bezier(.2,.8,.2,1); box-shadow:-30px 0 80px rgba(0,0,0,.55); }
   #drawer.open { right:0; }
   #drawer .dhead { padding:14px 18px; border-bottom:1px solid var(--border); display:flex; align-items:center; gap:12px; }
@@ -110,31 +130,46 @@
   #overlay.show { display:block; }
 
   /* ---------- Start screen ---------- */
-  #start { position:fixed; inset:0; background:var(--bg); display:flex; flex-direction:column; align-items:center; justify-content:center; gap:22px; z-index:60; }
-  #start h1 { letter-spacing:.5em; font-size:30px; font-weight:800; text-indent:.5em; }
-  #start p { color:var(--fg-3); font-size:14px; }
-  #start .box { width:640px; border:1px solid var(--border-strong); border-radius:14px; background:var(--panel); padding:18px; display:flex; flex-direction:column; gap:14px; }
-  #start input[type=text] { width:100%; height:44px; font-size:14px; background:var(--bg); }
-  #start .row { display:flex; align-items:center; gap:14px; color:var(--fg-2); font-size:12.5px; }
-  #start .row label { display:flex; gap:7px; align-items:center; cursor:pointer; }
-  #start button { height:40px; font-size:13.5px; }
-  #modes { color:var(--fg-3); font-size:11.5px; letter-spacing:.05em; }
+  #start { position:fixed; inset:0; background:var(--bg); display:flex; flex-direction:column; align-items:center; justify-content:center; gap:26px; z-index:60;
+    background:radial-gradient(ellipse at 50% 30%, #15151A 0%, var(--bg) 65%); }
+  #start h1 { font-family:'Orbitron',sans-serif; letter-spacing:.55em; text-indent:.55em; font-size:38px; font-weight:900;
+    background:linear-gradient(180deg, #FFFFFF 30%, #6A6A75 100%); -webkit-background-clip:text; background-clip:text; color:transparent;
+    text-shadow:0 0 60px rgba(255,255,255,.12); }
+  #start .tag { color:var(--fg-3); font-size:14px; letter-spacing:.02em; }
+  /* Composer (chat box) */
+  #composer { width:680px; border:1px solid var(--border-strong); border-radius:16px; background:linear-gradient(180deg,#141417,#101013);
+    box-shadow:0 24px 80px rgba(0,0,0,.55), inset 0 1px 0 rgba(255,255,255,.04); overflow:hidden; transition:border-color .25s, box-shadow .25s; }
+  #composer:focus-within { border-color:#8A8A93; box-shadow:0 24px 80px rgba(0,0,0,.6), 0 0 0 3px rgba(250,250,250,.06); }
+  #composer textarea { width:100%; background:transparent; border:0; outline:none; resize:none; color:var(--fg);
+    font:14.5px/1.6 ui-sans-serif,system-ui,sans-serif; padding:18px 20px 8px; min-height:84px; }
+  #composer textarea::placeholder { color:var(--fg-3); }
+  #composer .crow { display:flex; align-items:center; gap:10px; padding:10px 12px 12px 16px; border-top:1px solid var(--border); }
+  .toggle { display:flex; align-items:center; gap:8px; cursor:pointer; color:var(--fg-2); font-size:12px; border:1px solid var(--border); border-radius:999px; height:28px; padding:0 12px; user-select:none; transition:all .2s; }
+  .toggle input { display:none; }
+  .toggle .knob { width:8px; height:8px; border-radius:50%; background:var(--fg-3); transition:background .2s; }
+  .toggle.on { border-color:var(--warn); color:var(--warn); }
+  .toggle.on .knob { background:var(--warn); }
+  #composer .crow .hint { color:var(--fg-3); font-size:11px; margin-left:auto; }
+  #startBtn { height:36px; border-radius:10px; padding:0 18px; display:flex; align-items:center; gap:8px; }
+  #startBtn:hover { box-shadow:0 0 24px rgba(250,250,250,.18); }
+  #modes { color:var(--fg-3); font-size:11px; letter-spacing:.08em; }
+  #modes b { color:var(--fg-2); font-weight:600; }
 </style>
 </head>
 <body>
   <div id="start">
     <h1>CEIL</h1>
-    <p>A live-replanning multi-agent runtime. One objective in — an engineering org out.</p>
-    <div class="box">
-      <input id="promptInput" type="text" value="Build a Leave Management module with role-based approvals, Slack notifications, and an admin dashboard" />
-      <div class="row">
-        <label><input id="injectFail" type="checkbox" /> stage a QA failure (Supervisor recovery)</label>
+    <div class="tag">A live-replanning multi-agent runtime. One objective in — an engineering org out.</div>
+    <div id="composer">
+      <textarea id="promptInput" rows="3" placeholder="What should the org build?">Build a Leave Management module with role-based approvals, Slack notifications, and an admin dashboard</textarea>
+      <div class="crow">
+        <label class="toggle" id="failToggle"><input id="injectFail" type="checkbox" /><span class="knob"></span>stage a QA failure</label>
         <span class="chip">Autonomy <b>L4</b> · prod gated</span>
-        <span style="flex:1"></span>
-        <button id="startBtn">Spawn the org →</button>
+        <span class="hint mono">Enter ↵ to launch</span>
+        <button id="startBtn">Spawn the org <span>→</span></button>
       </div>
-      <div id="modes" class="mono">modes: …</div>
     </div>
+    <div id="modes" class="mono">modes: …</div>
   </div>
 
   <header>
@@ -149,15 +184,16 @@
   <div id="main">
     <div id="canvas">
       <div id="org">
-        <div class="tier" style="position:relative"><span class="tlabel" style="top:6px">Command</span>
+        <svg id="edges"></svg>
+        <div class="tier"><span class="tlabel" style="top:6px">Command</span>
           <div class="node" id="node-manager"><h4><span class="dot"></span>Manager</h4><div class="sub">idle</div><div class="foot"><span>strategy</span></div></div>
         </div>
-        <div class="tier" style="position:relative"><span class="tlabel" style="top:6px">Coordination</span>
+        <div class="tier"><span class="tlabel" style="top:6px">Coordination</span>
           <div class="node" id="node-planning"><h4><span class="dot"></span>Planning</h4><div class="sub">idle</div><div class="foot"><span>decomposition</span></div></div>
-          <div class="node" id="node-looper"><h4><span class="dot"></span>Looper</h4><div class="sub">idle</div><span class="tick mono">tick 0</span><div class="foot"><span>live replanner</span></div></div>
+          <div class="node" id="node-looper"><h4><span class="dot"></span>Looper</h4><div class="sub">idle</div><span class="tick mono">tick 0</span><div class="foot"><span>live replanner</span></div><div class="ring" id="looperRing"></div></div>
           <div class="node" id="node-supervisor"><h4><span class="dot"></span>Supervisor</h4><div class="sub">monitoring</div><div class="foot"><span>recovery</span></div></div>
         </div>
-        <div class="tier" style="position:relative"><span class="tlabel" style="top:6px">Execution</span>
+        <div class="tier"><span class="tlabel" style="top:6px">Execution</span>
           <div class="node clickable" id="node-backend"><h4><span class="dot"></span>Backend</h4><div class="sub">idle</div><div class="foot"><span>APIs</span><span>view code ↗</span></div></div>
           <div class="node clickable" id="node-frontend"><h4><span class="dot"></span>Frontend</h4><div class="sub">idle</div><div class="foot"><span>UI</span><span>view code ↗</span></div></div>
           <div class="node clickable" id="node-database"><h4><span class="dot"></span>Database</h4><div class="sub">idle</div><div class="foot"><span>schema</span><span>view code ↗</span></div></div>
@@ -171,8 +207,11 @@
         <details class="art"><summary>Docs <b id="cDoc">0</b></summary><div class="pop" id="pDoc"></div></details>
         <span class="chip">Slack sent <b id="cSlack">0</b></span>
         <div id="controls">
-          <input id="slackInput" type="text" placeholder="Requirement change — sent to the real Slack channel…" />
-          <button class="ghost" id="slackBtn">Send as PM</button>
+          <div class="slackbox">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#FAFAFA" stroke-width="2"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>
+            <input id="slackInput" type="text" placeholder="Requirement change → real Slack channel…" />
+            <button class="ghost" id="slackBtn">Send as PM</button>
+          </div>
           <button class="approve" id="approveBtn" style="display:none">Approve prod deploy</button>
         </div>
       </div>
@@ -205,18 +244,23 @@ const EVT = {
   HumanApproved:'#4ADE80', Deployed:'#4ADE80', TaskAssigned:'#A1A1AA', AgentThinking:'#63636B',
   AgentToolCall:'#A1A1AA', PlanReady:'#FAFAFA', ObjectiveReceived:'#FAFAFA',
 };
-let objectiveId = null, startedAt = null, state = null;
+let objectiveId = null, startedAt = null, state = null, lastTick = 0, firstRender = true;
+const seenEvents = new Set();
 const $ = (id) => document.getElementById(id);
 
-fetch('/health').then(r=>r.json()).then(h => { $('modes').textContent = 'env: ' + h.env + ' · llm: ' + (h.llm||'?') + ' · tools: ' + (h.tools||'?'); }).catch(()=>{});
+fetch('/health').then(r=>r.json()).then(h => { $('modes').innerHTML = 'env <b>' + h.env + '</b> · llm <b>' + (h.llm||'?') + '</b> · tools <b>' + (h.tools||'?') + '</b>'; }).catch(()=>{});
 
+/* ---- Start / composer ---- */
+$('failToggle').onclick = () => setTimeout(() => $('failToggle').classList.toggle('on', $('injectFail').checked), 0);
+$('promptInput').addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); $('startBtn').click(); } });
 $('startBtn').onclick = async () => {
   const res = await fetch('/api/objectives', { method:'POST', headers:{'Content-Type':'application/json'},
     body: JSON.stringify({ prompt: $('promptInput').value, injectFailure: $('injectFail').checked }) });
   const data = await res.json();
   objectiveId = data.objectiveId; startedAt = Date.now();
   $('start').style.display = 'none';
-  setInterval(poll, 1200); poll();
+  requestAnimationFrame(drawEdges);
+  setInterval(poll, 1100); poll();
 };
 $('slackBtn').onclick = async () => {
   const text = $('slackInput').value.trim(); if (!text) return;
@@ -228,12 +272,96 @@ $('approveBtn').onclick = async () => {
   $('approveBtn').style.display = 'none';
 };
 
+/* ================= EDGE LAYER (handoffs & communication) ================= */
+const BASE_EDGES = [
+  ['manager','planning'], ['manager','looper'], ['manager','supervisor'],
+  ['looper','backend'], ['looper','frontend'], ['looper','database'], ['looper','qa'],
+];
+const edgePaths = {}; // "a>b" -> <path>
+let recoverEdge = null;
+
+function center(el, box, edge) {
+  const r = el.getBoundingClientRect();
+  return { x: r.left - box.left + r.width/2, y: edge === 'top' ? r.top - box.top : r.top - box.top + r.height };
+}
+function edgeD(a, b) {
+  const box = $('org').getBoundingClientRect();
+  const p1 = center($('node-'+a), box, 'bottom'), p2 = center($('node-'+b), box, 'top');
+  const my = (p1.y + p2.y) / 2;
+  return `M ${p1.x} ${p1.y} C ${p1.x} ${my}, ${p2.x} ${my}, ${p2.x} ${p2.y}`;
+}
+function drawEdges() {
+  const svg = $('edges'); svg.innerHTML = '';
+  for (const [a,b] of BASE_EDGES) {
+    const p = document.createElementNS('http://www.w3.org/2000/svg','path');
+    p.setAttribute('d', edgeD(a,b)); p.setAttribute('class','edge');
+    svg.appendChild(p); edgePaths[a+'>'+b] = p;
+  }
+  // dynamic recovery edge (supervisor -> backend), hidden until needed
+  recoverEdge = document.createElementNS('http://www.w3.org/2000/svg','path');
+  recoverEdge.setAttribute('d', edgeD('supervisor','backend'));
+  recoverEdge.setAttribute('class','edge'); recoverEdge.style.display = 'none';
+  svg.appendChild(recoverEdge);
+}
+window.addEventListener('resize', () => { if (objectiveId) drawEdges(); });
+
+/** A glowing orb travels from node A to node B (the handoff animation). */
+function orb(a, b, color, reverse) {
+  const svg = $('edges');
+  let d;
+  try { d = edgeD(a, b); } catch { return; }
+  const path = document.createElementNS('http://www.w3.org/2000/svg','path');
+  path.setAttribute('d', d); path.setAttribute('fill','none'); path.setAttribute('stroke','none');
+  const dot = document.createElementNS('http://www.w3.org/2000/svg','circle');
+  dot.setAttribute('r','4.5'); dot.setAttribute('fill', color); dot.setAttribute('class','orb');
+  dot.style.color = color;
+  svg.appendChild(path); svg.appendChild(dot);
+  const len = path.getTotalLength(), t0 = performance.now(), dur = 1100;
+  (function step(t) {
+    let k = Math.min(1, (t - t0) / dur);
+    const e = k < .5 ? 2*k*k : 1 - Math.pow(-2*k + 2, 2) / 2; // easeInOut
+    const pt = path.getPointAtLength((reverse ? 1 - e : e) * len);
+    dot.setAttribute('cx', pt.x); dot.setAttribute('cy', pt.y);
+    if (k < 1) requestAnimationFrame(step); else { dot.remove(); path.remove(); }
+  })(t0);
+}
+
+/** Map fresh events to handoff orbs. */
+function animateEvent(e) {
+  const p = e.payload || {}; const role = e.agentRole;
+  const builders = ['backend','frontend','database'];
+  switch (e.type) {
+    case 'TaskAssigned':
+      if (p.role) orb(p.source === 'slack' ? 'looper' : 'planning', p.role === 'qa' ? 'qa' : p.role, p.source === 'slack' ? '#FBBF24' : '#FAFAFA');
+      break;
+    case 'PlanReady': orb('planning', 'looper', '#FAFAFA', false); break;
+    case 'LooperDecision': {
+      const a = p.action;
+      if (a === 'run_database') orb('looper','database','#FAFAFA');
+      else if (a === 'run_builders') { orb('looper','backend','#FAFAFA'); setTimeout(() => orb('looper','frontend','#FAFAFA'), 150); }
+      else if (a === 'run_qa') orb('looper','qa','#FAFAFA');
+      else if (a === 'replan') { orb('looper','backend','#FBBF24'); setTimeout(() => orb('looper','frontend','#FBBF24'), 150); }
+      else if (a === 'spawn_manager') orb('manager','looper','#FAFAFA', true);
+      else if (a === 'spawn_planning') orb('manager','planning','#FAFAFA');
+      break;
+    }
+    case 'TaskCompleted':
+      if (builders.includes(role)) orb('looper', role, '#4ADE80', true);      // result returns to memory/looper
+      else if (role === 'qa') orb('looper', 'qa', '#4ADE80', true);
+      else if (role === 'manager') orb('manager', 'looper', '#4ADE80');
+      break;
+    case 'TaskFailed': orb('looper', 'qa', '#F87171', true); break;
+    case 'ConflictDetected': orb('manager', 'supervisor', '#FBBF24'); break;
+    case 'RecoveryInitiated': if (recoverEdge) { recoverEdge.style.display=''; recoverEdge.setAttribute('class','edge recover'); } orb('supervisor','backend','#FBBF24'); break;
+    case 'HumanApproved': orb('manager','looper','#4ADE80'); break;
+    case 'ArtifactCreated': if (p.pr && builders.includes(role)) orb('looper', role, '#A1A1AA', true); break;
+  }
+}
+
 /* ---- Code drawer ---- */
 const closeDrawer = () => { $('drawer').classList.remove('open'); $('overlay').classList.remove('show'); };
 $('dClose').onclick = closeDrawer; $('overlay').onclick = closeDrawer;
-for (const role of ['backend','frontend','database','qa']) {
-  $('node-' + role).onclick = () => openDrawer(role);
-}
+for (const role of ['backend','frontend','database','qa']) $('node-' + role).onclick = () => openDrawer(role);
 function openDrawer(role) {
   if (!state) return;
   const tasks = state.tasks.filter(t => t.role === role);
@@ -245,8 +373,7 @@ function openDrawer(role) {
     const out = t.output || {};
     $('dMeta').innerHTML = (out.summary ? out.summary + '<br/>' : (t.status === 'in_progress' ? 'Working — code is being written…<br/>' : '')) +
       (out.prUrl ? 'PR: <a href="' + out.prUrl + '" target="_blank">' + out.prUrl + '</a>' : '');
-    const files = (out.files || []);
-    renderFiles(files);
+    renderFiles(out.files || []);
   }
   $('drawer').classList.add('open'); $('overlay').classList.add('show');
 }
@@ -295,8 +422,16 @@ function render(s) {
   }
   $('activeN').textContent = active;
 
+  // Active "communicating" edges: looper <-> any executing node
+  for (const [a,b] of BASE_EDGES) {
+    const p = edgePaths[a+'>'+b]; if (!p) continue;
+    const nb = $('node-'+b), na = $('node-'+a);
+    p.setAttribute('class', 'edge' + ((nb.classList.contains('exec') || na.classList.contains('exec')) ? ' active' : ''));
+  }
+
   const dec = s.decisions[0];
   if (dec) {
+    if (dec.tick !== lastTick) { lastTick = dec.tick; const r = $('looperRing'); r.classList.remove('go'); void r.offsetWidth; r.classList.add('go'); }
     $('tickCount').innerHTML = dec.tick + '<small>ticks</small>';
     document.querySelector('#node-looper .tick').textContent = 'tick ' + dec.tick;
     const act = (dec.deltas && dec.deltas.action) || '';
@@ -307,11 +442,20 @@ function render(s) {
   const conf = s.events.some(e => e.type === 'ConflictDetected');
   const qaOk = latest['qa'] && latest['qa'].status === 'completed';
   if (conf && !qaOk) setNode('supervisor', 'recover', 'recovering — re-tasked backend');
-  else if (conf) setNode('supervisor', 'done', 'recovered a failed build');
+  else if (conf) { setNode('supervisor', 'done', 'recovered a failed build'); if (recoverEdge) recoverEdge.style.display = 'none'; }
 
   const gateUp = status === 'staged';
   $('approveBtn').style.display = gateUp ? '' : 'none';
   if (gateUp) setNode('manager', 'gated', 'awaiting production approval');
+
+  // Handoff orbs for events we haven't animated yet (oldest first).
+  // The first poll's backlog is registered silently so we don't replay history.
+  for (const e of [...s.events].reverse()) {
+    if (seenEvents.has(e.id)) continue;
+    seenEvents.add(e.id);
+    if (!firstRender) animateEvent(e);
+  }
+  firstRender = false;
 
   $('events').innerHTML = s.events.map(e => {
     const who = e.agentRole || 'system';
@@ -348,7 +492,7 @@ function describe(e) {
     case 'DeployRequested': return 'deploy requested: ' + p.environment;
     case 'Deployed': return 'deployed ' + p.environment + ' → ' + (p.url || '');
     case 'AgentThinking': return 'thinking: ' + (p.text || '');
-    case 'AgentToolCall': return p.tool + '.' + p.action + (p.files ? ' (' + p.files.length + ' files)' : '');
+    case 'AgentToolCall': return p.tool + '.' + p.action + (p.files ? ' (' + p.files.length + ' files)' : '') + (p.merged ? ' [' + p.merged.length + ' → ' + p.into + ']' : '');
     case 'PlanReady': return 'plan ready — ' + p.taskCount + ' tasks';
     case 'ObjectiveReceived': return 'objective received';
     default: return e.type;

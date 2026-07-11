@@ -1,0 +1,16 @@
+# Secrets — never commit (Principle 5)
+.env
+.env.*
+!.env.local.example
+
+# Dependencies & build
+node_modules/
+dist/
+
+# Local database & runtime data
+.data/
+
+# Logs & OS
+*.log
+.DS_Store
+Thumbs.db
